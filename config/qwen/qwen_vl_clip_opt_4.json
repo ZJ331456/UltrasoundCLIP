@@ -1,0 +1,89 @@
+{
+  "model": {
+    "type": "qwen_vl_clip",
+    "model_name": "qwen_vl_clip",
+    "embed_dim": 768,
+    "vision_encoder": {
+      "model_path": "/media/ps/data-ssd/DolphinV1/dolphinV1_3B",
+      "process_type": "default",
+      "vision_dim": 2048,
+      "attention_heads": 8,
+      "dropout": 0.1,
+      "layer_norm_eps": 1e-6
+    },
+    "text_encoder": {
+      "model_name": "/media/ps/data-ssd/UltrasoundRAG/CLIP/checkpoints/BiomedBERT/BiomedNLP-BiomedBERT-base-uncased-abstract",
+      "max_length": 128,
+      "dropout": 0.1
+    },
+    "device": "auto",
+    "description": "超声图像细节识别优化的Qwen2.5-VL CLIP模型"
+  },
+  "training": {
+    "batch_size": 24,
+    "learning_rate": 2e-5,
+    "weight_decay": 0.01,
+    "max_epochs": 25,
+    "early_stopping_patience": 12,
+    "gradient_clip_val": 0.5,
+    "warmup_steps": 300,
+    "val_check_interval": 0.33,
+    "log_every_n_steps": 20,
+    "save_top_k": 3,
+    "monitor": "val_loss",
+    "mode": "min",
+    "optimizer": {
+      "type": "adamw",
+      "lr": 2e-5,
+      "weight_decay": 0.01,
+      "betas": [0.9, 0.999],
+      "eps": 1e-8
+    },
+    "scheduler": {
+      "type": "cosine_with_warmup",
+      "warmup_steps": 300,
+      "max_steps": 8000,
+      "eta_min": 5e-7
+    },
+    "loss": {
+      "type": "ultrasound_finegrained",
+      "temperature": 0.05,
+      "margin": 0.35,
+      "hard_ratio": 0.4,
+      "focal_gamma": 3.5,
+      "similarity_threshold": 0.7,
+      "contrastive_scale": 2.5,
+      "dynamic_temp_target": 0.62,
+      "dynamic_temp_gain": 2.5,
+      "semi_hard_window": 0.03
+    },
+    "gradient_accumulation_steps": 4
+  },
+  "data": {
+    "use_json_format": true,
+    "train_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/caption_breast/caption_breast_train.json",
+    "valid_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/caption_breast/caption_breast_valid.json",
+    "test_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/caption_breast/caption_breast_test.json",
+    "image_root": "/media/ps/data/Datasets/ultrasound",
+    "image_size": 384,
+    "max_text_length": 128,
+    "tokenizer_type": "local_bert",
+    "image_normalization": "clip",
+    "ultrasound_augmentation": {
+      "enabled": true,
+      "contrast_enhancement": true,
+      "noise_reduction": false,
+      "edge_enhancement": true,
+      "gamma_correction": [0.9, 1.1],
+      "rotation_range": [-3, 3],
+      "brightness_range": [0.9, 1.1],
+      "contrast_range": [0.9, 1.1],
+      "elastic_deformation": true,
+      "cutout_probability": 0.1,
+      "mixup_alpha": 0.2
+    },
+    "num_workers": 8,
+    "pin_memory": true,
+    "prefetch_factor": 4
+  }
+}

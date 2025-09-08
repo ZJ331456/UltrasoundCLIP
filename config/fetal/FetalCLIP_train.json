@@ -1,0 +1,45 @@
+{
+  "paths": {
+    "path_fetalclip_weight": "/home/zhoujun/NormalUltraCLIP/checkpoints/FetalCLIP_Pretrain/FetalCLIP_weights.pt",
+    "path_fetalclip_config": "/home/zhoujun/Fine-tuning-Clip/FetalCLIP/FetalCLIP_config.json"
+  },
+  "data": {
+    "use_json_format": true,
+    "train_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/更新路径之后的json数据集/split_with_fix_caption/all_train_redifine.json",
+    "valid_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/更新路径之后的json数据集/split_with_fix_caption/all_val_redifine.json",
+    "test_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/更新路径之后的json数据集/split_with_fix_caption/all_test_redifine.json",
+    "image_root": "/media/ps/data/Datasets/ultrasound"
+  },
+  "training": {
+    "batch_size": 64,
+    "num_workers": 4,
+    "max_epochs": 10,
+    "learning_rate": 1e-5,
+    "warmup_steps": 1000,
+    "weight_decay": 0.01,
+    "gradient_clip_val": 1.0,
+    "accumulate_grad_batches": 1,
+    "precision": 16,
+    "loss_type": "hybrid",
+    "margin": 0.2,
+    "soft_label_weight": 0.8
+  },
+  "model": {
+    "arch_name": "FetalCLIP",
+    "embed_dim": 768,
+    "temperature": 0.2
+  },
+  "evaluation": {
+    "rerank_method": "combined",
+    "rerank_alpha": 0.7,
+    "rerank_topk": 10,
+    "num_examples": 10,
+    "rerank_scope": "all"
+  },
+  "constants": {
+    "image_mean": [0.48145466, 0.4578275, 0.40821073],
+    "image_std": [0.26862954, 0.26130258, 0.27577711],
+    "max_text_length": 117,
+    "image_size": 224
+  }
+} 

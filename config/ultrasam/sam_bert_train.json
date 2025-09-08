@@ -1,0 +1,47 @@
+{
+  "model": {
+    "type": "sam_bert",
+    "model_name": "universal_clip_sam_bert",
+    "embed_dim": 768,
+    "temperature": 0.07,
+    "image_encoder": {
+      "type": "sam",
+      "model_name": "vit_b",
+      "pretrained": true,
+      "freeze": false,
+      "checkpoint_path": "/media/ps/data-ssd/UltrasoundRAG/CLIP/checkpoints/UltraSAM/mmdet_sam_vit_b_01ec64_backbone.pth"
+    },
+    "text_encoder": {
+      "type": "bert",
+      "model_name": "/media/ps/data-ssd/UltrasoundRAG/CLIP/checkpoints/BiomedBERT/BiomedNLP-BiomedBERT-base-uncased-abstract",
+      "freeze": false
+    }
+  },
+  "training": {
+    "batch_size": 16,
+    "learning_rate": 1e-5,
+    "weight_decay": 0.01,
+    "temperature": 0.07,
+    "max_epochs": 20,
+    "early_stopping_patience": 10,
+    "gradient_clip_val": 1.0,
+    "accumulate_grad_batches": 8,
+    "val_check_interval": 1.0,
+    "log_every_n_steps": 50,
+    "num_workers": 4,
+    "warmup_steps": 500,
+    "loss_type": "soft_target"
+  },
+  "data": {
+    "use_json_format": true,
+    "train_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/caption_breast/caption_breast_train.json",
+    "valid_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/caption_breast/caption_breast_valid.json",
+    "test_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/caption_breast/caption_breast_test.json",
+    "image_root": "/media/ps/data/Datasets/ultrasound",
+    "image_size": 1024,
+    "max_text_length": 256,
+    "batch_size": 4,
+    "num_workers": 4,
+    "tokenizer_type": "bert"
+  }
+}

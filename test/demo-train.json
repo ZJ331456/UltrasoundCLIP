@@ -1,0 +1,548 @@
+{
+  "DataInfo": {
+    "case001749": {
+      "anatomy_location": "breast",
+      "split": "train",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case001749.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/e3503755fd4d348/000027.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.4328034682080925,
+          0.4602601156069364,
+          -0.5939306358381503,
+          0.4725433526011561
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 117,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and internal microcalcifications."
+    },
+    "case003681": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case003681.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/xc92f65176f4b7a7/000044.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.5910404624277457,
+          0.22976878612716764,
+          0.6473988439306358,
+          0.30346820809248554
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 10,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and no evident internal calcifications."
+    },
+    "case001485": {
+      "anatomy_location": "breast",
+      "split": "train",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case001485.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/x534a61eb0a51857e/000000.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.4790462427745665,
+          0.36054913294797686,
+          0.2702312138728324,
+          0.16618497109826588
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 100,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and internal microcalcifications."
+    },
+    "case003124": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case003124.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/x2a14fc40130faa71/000012.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.5202702702702703,
+          0.37415540540540543,
+          0.5844594594594594,
+          0.41385135135135137
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 5,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, heterogeneous hypoechoic echogenicity, and internal microcalcifications."
+    },
+    "case004496": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case004496.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/13b8293635639a4c/000130.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.42485549132947975,
+          0.4421965317919075,
+          0.24855491329479767,
+          0.2745664739884393
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 16,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and internal microcalcifications."
+    },
+    "case000056": {
+      "anatomy_location": "breast",
+      "split": "train",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case000056.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/355f8098c8aa52ed/000044.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.3918918918918919,
+          0.3260135135135135,
+          0.42905405405405406,
+          0.3344594594594595
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 4,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and no internal calcifications."
+    },
+    "case006684": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case006684.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/benign/x5bf13bab47cb0d26/000146.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "benign",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.43665540540540543,
+          0.19256756756756757,
+          0.31925675675675674,
+          0.24324324324324326
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 36,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a benign ultrasound image of breast with oval shape, circumscribed margins, hypoechoic echotexture, and absence of calcifications."
+    },
+    "case004137": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case004137.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/2390fbea047347b/000067.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.5476878612716763,
+          0.21459537572254336,
+          0.34104046242774566,
+          0.18641618497109827
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 13,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and no visible internal calcifications."
+    },
+    "case002498": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case002498.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/2c12ff6464cfb1ff/000263.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.19457013574660634,
+          0.22850678733031674,
+          0.3076923076923077,
+          0.3076923076923077
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 1,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and absence of internal calcifications."
+    },
+    "case002617": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case002617.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/benign/x1befd37d51d96ee9/000090.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "benign",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.6278280542986425,
+          0.47850678733031676,
+          0.5678733031674208,
+          0.38687782805429866
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 2,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a benign ultrasound image of breast with oval shape, circumscribed margins, hypoechoic echotexture, and absence of internal calcifications."
+    },
+    "case001610": {
+      "anatomy_location": "breast",
+      "split": "train",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case001610.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/46127d08b575d72/000035.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.47313432835820896,
+          0.3664179104477612,
+          0.4537313432835821,
+          0.36268656716417913
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 108,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and internal microcalcifications."
+    },
+    "case003870": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case003870.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/xc92f65176f4b7a7/000233.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.45809248554913296,
+          0.2254335260115607,
+          0.5635838150289018,
+          0.3583815028901734
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 10,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and internal microcalcifications."
+    },
+    "case006194": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case006194.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/x2ec05819a4aafe2a/000167.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.5520361990950227,
+          0.39819004524886875,
+          0.4434389140271493,
+          0.38461538461538464
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 33,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and absence of internal calcifications."
+    },
+    "case003255": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case003255.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/benign/69bd11c0456eb2f5/000028.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "benign",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.5537313432835821,
+          0.24701492537313433,
+          0.23880597014925373,
+          0.2373134328358209
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 6,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a benign ultrasound image of breast with round shape, sharply demarcated margins, anechoic echogenicity, and absence of internal calcifications."
+    },
+    "case003557": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case003557.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/6c4a81bc03ea416b/000097.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.48817567567567566,
+          0.34797297297297297,
+          0.5878378378378378,
+          0.48986486486486486
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 9,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and internal microcalcifications."
+    },
+    "case000624": {
+      "anatomy_location": "breast",
+      "split": "train",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case000624.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/30945123ea4d9e62/000081.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.5238439306358381,
+          0.42124277456647397,
+          0.4841040462427746,
+          0.3945086705202312
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 42,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and internal microcalcifications."
+    },
+    "case004162": {
+      "anatomy_location": "breast",
+      "split": "val",
+      "data_path": "/media/ps/data/Datasets/ultrasound/bm_pre_json/21/21.Breast_Ultrasound_Segmentation_Dataset/img/case004162.png",
+      "original_path": "/media/ps/data/Datasets/ultrasound/21/21.Miccai_2022_BUV/rawframes/malignant/2390fbea047347b/000092.png",
+      "seg_path": null,
+      "seg_channel_name": null,
+      "classes": {
+        "label": "malignant",
+        "section": "breast section",
+        "BIRADS": null,
+        "BIRADS_reader1": null,
+        "BIRADS_reader2": null
+      },
+      "caption": null,
+      "report": null,
+      "box": {
+        "0": [
+          0.43858381502890176,
+          0.21820809248554912,
+          0.6864161849710982,
+          0.2254335260115607
+        ]
+      },
+      "measurement": null,
+      "keypoints": null,
+      "demographic": null,
+      "biochemical": null,
+      "patient_id": 13,
+      "notes": "the training dataset randomly select 15 frames of each video.",
+      "CLIPcaption": "This is a malignant ultrasound image of breast with irregular shape, spiculated margins, hypoechoic echogenicity, and absence of internal calcifications."
+    }
+  }
+}

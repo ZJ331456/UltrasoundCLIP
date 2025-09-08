@@ -1,0 +1,99 @@
+{
+  "model": {
+    "type": "qwen_vl_clip",
+    "model_name": "qwen_vl_clip",
+    "embed_dim": 768,
+    "vision_encoder": {
+      "model_path": "/media/ps/data-ssd/DolphinV1/dolphinV1_3B",
+      "process_type": "attention_pooling",
+      "vision_dim": 2048,
+      "attention_heads": 8,
+      "dropout": 0.1,
+      "layer_norm_eps": 1e-6
+    },
+    "text_encoder": {
+      "model_name": "/media/ps/data-ssd/UltrasoundRAG/CLIP/checkpoints/BiomedBERT/BiomedNLP-BiomedBERT-base-uncased-abstract",
+      "max_length": 128,
+      "dropout": 0.1
+    },
+    "device": "auto",
+    "description": "超声图像细节识别优化的Qwen2.5-VL CLIP模型"
+  },
+  "training": {
+    "batch_size": 32,
+    "learning_rate": 1e-5,
+    "weight_decay": 0.05,
+    "max_epochs": 40,
+    "early_stopping_patience": 15,
+    "gradient_clip_val": 1.0,
+    "warmup_steps": 500,
+    "val_check_interval": 0.25,
+    "log_every_n_steps": 10,
+    "save_top_k": 5,
+    "monitor": "val_loss",
+    "mode": "min",
+    "optimizer": {
+      "type": "adamw",
+      "lr": 1e-5,
+      "weight_decay": 0.05,
+      "betas": [0.9, 0.95],
+      "eps": 1e-8,
+      "amsgrad": true
+    },
+    "scheduler": {
+      "type": "cosine_with_warmup",
+      "warmup_steps": 500,
+      "max_steps": 12000,
+      "eta_min": 1e-6,
+      "warmup_init_lr": 1e-6
+    },
+    "loss": {
+      "type": "ultrasound_finegrained",
+      "temperature": 0.03,
+      "margin": 0.4,
+      "hard_ratio": 0.5,
+      "focal_gamma": 4.0,
+      "similarity_threshold": 0.65,
+      "contrastive_scale": 3.0,
+      "dynamic_temp_target": 0.7,
+      "dynamic_temp_gain": 3.0,
+      "semi_hard_window": 0.02
+    },
+    "gradient_accumulation_steps": 4,
+    "mixed_precision": true,
+    "find_unused_parameters": false
+  },
+  "data": {
+    "use_json_format": true,
+    "train_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/更新路径之后的json数据集/split_with_llm_enhance_refined/筛选图片/split_output/train.json",
+    "valid_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/更新路径之后的json数据集/split_with_llm_enhance_refined/筛选图片/split_output/val.json",
+    "test_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/更新路径之后的json数据集/split_with_llm_enhance_refined/筛选图片/split_output/test.json",
+    "image_root": "/media/ps/data/Datasets/ultrasound",
+    "image_size": 384,
+    "max_text_length": 128,
+    "tokenizer_type": "local_bert",
+    "image_normalization": "clip",
+    "ultrasound_augmentation": {
+      "enabled": true,
+      "contrast_enhancement": true,
+      "noise_reduction": true,
+      "edge_enhancement": true,
+      "gamma_correction": [0.8, 1.2],
+      "rotation_range": [-5, 5],
+      "brightness_range": [0.85, 1.15],
+      "contrast_range": [0.85, 1.15],
+      "elastic_deformation": true,
+      "cutout_probability": 0.15,
+      "mixup_alpha": 0.3,
+      "cutmix_alpha": 0.2,
+      "random_erasing": 0.1,
+      "gaussian_blur": 0.1,
+      "speckle_noise": 0.05,
+      "motion_blur": 0.05
+    },
+    "batch_size": 32,
+    "num_workers": 12,
+    "pin_memory": true,
+    "prefetch_factor": 6
+  }
+}

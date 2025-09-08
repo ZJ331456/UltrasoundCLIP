@@ -1,0 +1,3 @@
+很奇怪--多卡有问题，很慢
+单卡不会出现这种情况
+CUDA_VISIBLE_DEVICES=3 python load_3b.py

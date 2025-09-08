@@ -1,0 +1,140 @@
+{
+    "model": {
+      "type": "convnext_clip",
+      "model_name": "convnext_roberta_clip",
+      "embed_dim": 768,
+      "vision_pooling": "auto",
+      "vision_encoder": {
+        "model_path": "/media/ps/data-ssd/UltrasoundRAG/CLIP/checkpoints/ConvNeXt/convnext-tiny-224",
+        "vision_dim": 768
+      },
+      "text_encoder": {
+        "model_name": "/media/ps/data-ssd/UltrasoundRAG/CLIP/checkpoints/RoBerta/roberta-base",
+        "max_length": 128
+      },
+      "device": "auto",
+      "description": "ConvNeXt(图像)+RoBERTa(文本) 的 CLIP 轻量模型"
+    },
+    "training": {
+      "batch_size": 16,
+      "learning_rate": 5e-5,
+      "weight_decay": 0.01,
+      "max_epochs": 100,
+      "early_stopping_patience": 8,
+      "early_stopping_min_delta": 0.001,
+      "gradient_clip_val": 0.5,
+      "warmup_steps": 300,
+      "val_check_interval": 0.25,
+      "log_every_n_steps": 10,
+      "save_top_k": 5,
+      "monitor": "val_r1",
+      "mode": "max",
+      "optimizer": {
+        "type": "adamw",
+        "lr": 5e-5,
+        "weight_decay": 0.01,
+        "betas": [0.9, 0.95],
+        "eps": 1e-6,
+        "amsgrad": true
+      },
+      "scheduler": {
+        "type": "cosine_with_warmup",
+        "warmup_steps": 300,
+        "max_steps": 8000,
+        "eta_min": 5e-6,
+        "warmup_init_lr": 5e-6
+      },
+      "loss": {
+        "type": "ultrasound_finegrained",
+        "temperature": 0.07,
+        "margin": 0.3,
+        "hard_ratio": 0.3,
+        "focal_gamma": 2.0,
+        "similarity_threshold": 0.75,
+        "contrastive_scale": 2.0,
+        "dynamic_temp_target": 0.6,
+        "dynamic_temp_gain": 2.0,
+        "semi_hard_window": 0.05,
+        "loss_weights": {
+          "clip": 1.0,
+          "hard_neg": 0.5,
+          "triplet": 0.3,
+          "focal": 0.2
+        },
+        "label_smoothing": 0.1,
+        "feature_clamp_range": [-5.0, 5.0],
+        "temperature_range": [0.02, 0.2]
+      },
+      "gradient_accumulation_steps": 2,
+      "mixed_precision": true,
+      "find_unused_parameters": false,
+      "numerical_stability": {
+        "eps": 1e-6,
+        "feature_enhancement_scale": 1.02,
+        "gradient_clip_norm": 0.5,
+        "nan_inf_detection": true,
+        "safe_fallback": true
+      }
+    },
+    "data": {
+      "use_json_format": true,
+      "train_json": "/media/ps/data-ssd/UltrasoundRAG/CLIP/dataset/coco2017/val_split/coco_val_train.json",
+      "valid_json": "/media/ps/data-ssd/UltrasoundRAG/CLIP/dataset/coco2017/val_split/coco_val_val.json",
+      "test_json": "/media/ps/data-ssd/UltrasoundRAG/CLIP/dataset/coco2017/val_split/coco_val_test.json",
+      "image_root": "/media/ps/data-ssd/UltrasoundRAG/CLIP/dataset/coco2017/val2017",
+      "image_size": 384,
+      "max_text_length": 128,
+      "tokenizer_type": "local_bert",
+      "image_normalization": "clip",
+      "ultrasound_augmentation": {
+        "enabled": true,
+        "contrast_enhancement": true,
+        "noise_reduction": true,
+        "edge_enhancement": true,
+        "gamma_correction": [0.8, 1.2],
+        "rotation_range": [-5, 5],
+        "brightness_range": [0.9, 1.1],
+        "contrast_range": [0.9, 1.1],
+        "elastic_deformation": false,
+        "cutout_probability": 0.1,
+        "mixup_alpha": 0.2,
+        "cutmix_alpha": 0.1,
+        "random_erasing": 0.05,
+        "gaussian_blur": 0.05,
+        "speckle_noise": 0.02,
+        "motion_blur": 0.02
+      },
+      "batch_size": 16,
+      "num_workers": 12,
+      "pin_memory": true,
+      "prefetch_factor": 4
+    },
+    "validation": {
+      "checkpoint_every_n_epochs": 2,
+      "validate_every_n_steps": 100,
+      "save_best_model": true,
+      "metric_for_best_model": "val_accuracy",
+      "greater_is_better": true
+    },
+    "logging": {
+      "log_level": "INFO",
+      "log_nan_inf_warnings": true,
+      "track_numerical_stability": true,
+      "save_training_curves": true,
+      "wandb_project": "ultrasound-clip-optimized",
+      "experiment_name": "convnext_roberta_clip_coco_v1"
+    },
+    "version": "1.0",
+    "optimizations": [
+      "\u6570\u503c\u7a33\u5b9a\u6027\u589e\u5f3a",
+      "\u4fdd\u5b88\u7279\u5f81\u589e\u5f3a\u7b56\u7565",
+      "\u52a8\u6001\u635f\u5931\u6743\u91cd\u8c03\u6574",
+      "\u65e9\u505c\u673a\u5236\u4f18\u5316",
+      "\u68af\u5ea6\u88c1\u526a\u52a0\u5f3a",
+      "\u6807\u7b7e\u5e73\u6ed1\u6b63\u5219\u5316",
+      "\u5b66\u4e60\u7387\u7b56\u7565\u4f18\u5316",
+      "\u6570\u636e\u589e\u5f3a\u4fdd\u5b88\u5316"
+    ]
+  }
+  
+  

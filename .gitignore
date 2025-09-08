@@ -1,0 +1,73 @@
+
+# Ignore large/unnecessary CLIP artifacts
+/checkpoints/
+/__pycache__/
+/cn_clip/
+/dataset/
+/eval_results/
+/example_configs/
+/logs/
+/output/
+/related_clip_code/
+/nohup.out
+
+# General OS/Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python cache and artifacts
+*.py[cod]
+*.so
+*.pyd
+__pycache__/
+*.pkl
+*.pickle
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs and caches
+*.log
+nohup.out
+.cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Data and model weights
+data/
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.npz
+*.npy
+*.onnx
+*.h5
+*.weights
+*.safetensors
+
+# Experiment tracking
+wandb/
+runs/
+tensorboard/
+events.out.tfevents*
+
+# Ignore local model repos
+models/

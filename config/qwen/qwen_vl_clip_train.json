@@ -1,0 +1,55 @@
+{
+  "model": {
+    "type": "qwen_vl_clip",
+    "model_name": "qwen_vl_clip",
+    "model_path": "/media/ps/data-ssd/DolphinV1/dolphinV1_3B",
+    "embed_dim": 768,
+    "vision_encoder": {
+      "vision_dim": 2048
+
+    },
+    "text_encoder": {
+      "model_name": "/media/ps/data-ssd/UltrasoundRAG/CLIP/checkpoints/BiomedBERT/BiomedNLP-BiomedBERT-base-uncased-abstract"
+    },
+    "device": "auto",
+    "description": "Qwen2.5-VL CLIP模型配置"
+  },
+  "training": {
+    "batch_size": 8,
+    "learning_rate": 1e-5,
+    "weight_decay": 0.01,
+    "max_epochs": 10,
+    "early_stopping_patience": 10,
+    "gradient_clip_val": 1.0,
+    "warmup_steps": 500,
+    "val_check_interval": 1.0,
+    "log_every_n_steps": 50,
+    "optimizer": {
+      "type": "adamw",
+      "lr": 1e-5,
+      "weight_decay": 0.01,
+      "betas": [0.9, 0.999]
+    },
+    "scheduler": {
+      "type": "cosine",
+      "eta_min": 1e-7
+    },
+    "loss": {
+      "type": "clip",
+      "temperature": 0.07
+    },
+    "gradient_accumulation_steps": 16
+  },
+  "data": {
+    "use_json_format": true,
+    "train_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/caption_breast/caption_breast_train.json",
+    "valid_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/caption_breast/caption_breast_valid.json",
+    "test_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/caption_breast/caption_breast_test.json",
+    "image_root": "/media/ps/data/Datasets/ultrasound",
+    "image_size": 1024,
+    "max_text_length": 256,
+    "batch_size": 8,
+    "num_workers": 4,
+    "tokenizer_type": "clip"
+  }
+}

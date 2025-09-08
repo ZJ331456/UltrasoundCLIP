@@ -1,0 +1,53 @@
+{
+  "paths": {
+    "path_fetalclip_weight": "/media/ps/data-ssd/UltrasoundRAG/ultra_CLIP/clip_model_best.pt",
+    "path_fetalclip_config": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/ultrasound_data_traing/FetalCLIP_config.json",
+    "save_path": "./clip_model.pt"
+  },
+  "data": {
+    "use_json_format": true,
+    "train_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/generate2_cn_train.json",
+    "valid_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/generate2_cn_valid.json",
+    "test_json": "",
+    "image_root": "/media/ps/data/Datasets/ultrasound"
+  },
+  "training": {
+    "batch_size": 64,
+    "num_workers": 4,
+    "max_epochs": 20,
+    "learning_rate": 1e-5,
+    "warmup_steps": 500,
+    "weight_decay": 0.01,
+    "gradient_clip_val": 1.0,
+    "accumulate_grad_batches": 1,
+    "precision": 16,
+    "log_every": 10,
+    "loss_type": "hybrid",
+    "margin": 0.2,
+    "soft_label_weight": 0.8,
+    "soft_label_lambda": 0.3,
+    "soft_label_temp": 0.1
+  },
+  "model": {
+    "arch_name": "UltraCLIP",
+    "embed_dim": 768,
+    "temperature": 0.07,
+    "freeze_vit": false,
+    "image_encoder_model": "vit_base_patch16_224",
+    "text_encoder_model": "hfl/chinese-macbert-base"
+  },
+  "evaluation": {
+    "rerank_method": "combined",
+    "rerank_alpha": 0.7,
+    "rerank_topk": 10,
+    "num_examples": 10,
+    "rerank_scope": "all"
+  },
+  "constants": {
+    "image_mean": [0.48145466, 0.4578275, 0.40821073],
+    "image_std": [0.26862954, 0.26130258, 0.27577711],
+    "max_text_length": 256,
+    "image_size": 224
+  },
+  "device": "cuda"
+} 

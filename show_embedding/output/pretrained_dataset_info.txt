@@ -1,0 +1,140 @@
+Pretrained SAM+BERT Dataset Information Summary:
+==================================================
+File No. 3: 03_fetal_dataset_val.json
+  Sample count: 2
+  Total samples: 2
+------------------------------
+File No. 4: 04_thyroid_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 9: 09_kidney_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 10: 10_fetal_dataset_train.json
+  Sample count: 2
+  Total samples: 2
+------------------------------
+File No. 13: 13_fetal_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 16: 16_muscle_dataset_val.json
+  Sample count: 2
+  Total samples: 2
+------------------------------
+File No. 18: 18_box_new_heart_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 21: 21_breast_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 23: 23_new_breast_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 27: 27_carotid_artery_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 28: 28_knee_classification_new_knee_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 31: 31_fetal_dataset_val.json
+  Sample count: 2
+  Total samples: 2
+------------------------------
+File No. 32: 32_image_thyroid_dataset_val.json
+  Sample count: 2
+  Total samples: 2
+------------------------------
+File No. 38: 38_carotid_artery_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 40: 40_breast_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 42: 42_pancreas_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 47: 47_brachial_plexus_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 48: 48_heart_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 49: 49_gastrointestinal_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 50: 50_fetal_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 64: 64_breast_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 66: 66_breast_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 69: 69_new_carotid_artery_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 70: 70_thyroid_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 74: 74_ovary_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 75: 75_ovary_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 79: 79_brachial_plexus_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 82: 82_fetal_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 83: 83_fetal_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 84: 84_fetal_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 86: 86_liver_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 87: 87_ovary_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 92: 92_muscle_dataset_val.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+File No. 93: 93_fetal_dataset_train.json
+  Sample count: 0
+  Total samples: 0
+------------------------------
+
+Total: 34 files, 10 samples

@@ -1,0 +1,9 @@
+{
+    "model_path": "/media/ps/data-ssd/DolphinV1/dolphinV1_3B",
+    "embed_dim": 768,
+    "text_encoder": {
+        "model_name": "/media/ps/data-ssd/UltrasoundRAG/CLIP/checkpoints/BiomedBERT/BiomedNLP-BiomedBERT-base-uncased-abstract"
+    },
+    "device": "auto",
+    "description": "Qwen2.5-VL CLIP模型配置文件"
+}
