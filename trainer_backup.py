@@ -118,39 +118,10 @@ class Trainer:
             print(f"    - 随机深度: {self.regularization_config.get('stochastic_depth', 0.0)}")
             print(f"    - 特征噪声: {self.regularization_config.get('feature_noise_std', 0.0)}")
         
-        # 检查是否使用了平衡采样器
-        self._check_balanced_sampling()
-        
         print(f"训练器初始化完成:")
         print(f"  - 损失函数: {type(self.criterion).__name__}")
         print(f"  - 优化器: {type(self.optimizer).__name__}")
         print(f"  - 学习率调度器: {type(self.scheduler).__name__}")
-    
-    def _check_balanced_sampling(self):
-        """检查是否使用了平衡采样器并打印相关信息"""
-        try:
-            # 检查训练数据加载器是否使用了平衡采样器
-            train_sampler = getattr(self.train_loader, 'sampler', None)
-            if train_sampler is not None:
-                sampler_type = type(train_sampler).__name__
-                if 'Balanced' in sampler_type or 'Stratified' in sampler_type:
-                    print(f"  - 平衡采样器: 启用 ({sampler_type})")
-                    
-                    # 如果采样器有统计信息方法，打印详细信息
-                    if hasattr(train_sampler, 'get_class_distribution_stats'):
-                        stats = train_sampler.get_class_distribution_stats()
-                        print(f"    - 类别数量: {stats.get('num_classes', 'N/A')}")
-                        print(f"    - 每batch类别数: {stats.get('num_classes_per_batch', 'N/A')}")
-                        print(f"    - 每类别样本数: {stats.get('samples_per_class', 'N/A')}")
-                        print(f"    - 类别不平衡比例: {stats.get('class_imbalance_ratio', 'N/A'):.2f}")
-                        print(f"    - 总batch数: {stats.get('num_batches', 'N/A')}")
-                else:
-                    print(f"  - 采样器: {sampler_type}")
-            else:
-                print(f"  - 采样器: 随机采样")
-                
-        except Exception as e:
-            print(f"  - 采样器检查失败: {e}")
     
     def _setup_auxiliary_losses(self):
         """设置辅助损失函数（mask监督和attention正则化）"""
@@ -424,33 +395,17 @@ class Trainer:
             
             return loss_fn
             
-        # elif loss_config['type'] == 'ultrasound_simple':
-        #     # UltrasoundSimpleLoss 支持的完整参数
-        #     return LossFactory.create_loss(
-        #         loss_type=loss_config['type'],
-        #         temperature=loss_config.get('temperature', 0.1),
-        #         label_smoothing=loss_config.get('label_smoothing', 0.1),
-        #         hard_negative_ratio=loss_config.get('hard_negative_ratio', 0.3),
-        #         margin=loss_config.get('margin', 0.2),
-        #         use_soft_label=loss_config.get('use_soft_label', True),
-        #         soft_label_temp=loss_config.get('soft_label_temp', 2.0),
-        #         soft_label_weight=loss_config.get('soft_label_weight', 0.6)
-        #     )
         elif loss_config['type'] == 'ultrasound_simple':
             # UltrasoundSimpleLoss 支持的完整参数
             return LossFactory.create_loss(
                 loss_type=loss_config['type'],
-                temperature=loss_config.get('temperature', 0.07),
+                temperature=loss_config.get('temperature', 0.1),
                 label_smoothing=loss_config.get('label_smoothing', 0.1),
-                hard_negative_ratio=loss_config.get('hard_negative_ratio', 0.5),
-                margin=loss_config.get('margin', 0.3),
+                hard_negative_ratio=loss_config.get('hard_negative_ratio', 0.3),
+                margin=loss_config.get('margin', 0.2),
                 use_soft_label=loss_config.get('use_soft_label', True),
                 soft_label_temp=loss_config.get('soft_label_temp', 2.0),
-                soft_label_weight=loss_config.get('soft_label_weight', 0.35),
-                hard_neg_weight=loss_config.get('hard_neg_weight', 0.35),
-                learnable_temperature=loss_config.get('learnable_temperature', True),
-                min_temperature=loss_config.get('min_temperature', 0.02),
-                max_temperature=loss_config.get('max_temperature', 0.5)
+                soft_label_weight=loss_config.get('soft_label_weight', 0.6)
             )
         elif loss_config['type'] == 'ultrasound_advanced':
             # UltrasoundAdvancedLoss 支持的完整参数
@@ -575,81 +530,6 @@ class Trainer:
         )[0], p=2, dim=-1).mean()
         
         return (img_grad_norm + txt_grad_norm) / 2
-    
-    def _forward_pass(self, images, text_inputs, masks=None, debug_mode=False):
-        """执行前向传播，返回所有特征"""
-        image_global = None
-        image_local = None
-        attention_map = None
-        
-        if hasattr(self.model, 'core'):
-            # 如果有 core 属性，直接调用核心模型
-            if masks is not None:
-                result = self.model.core(images, text_inputs, masks=masks)
-            else:
-                result = self.model.core(images, text_inputs)
-            
-            image_features = result['image_features']
-            text_features = result['text_features']
-            image_global = result.get('image_global', None)
-            image_local = result.get('image_local', None)
-            attention_map = result.get('attention_map', None)
-        else:
-            # 否则使用原来的方式
-            model_output = self.model(images, text_inputs, masks=masks, debug=debug_mode)
-            
-            # 处理可能返回3个值的情况（包含attention_map）
-            if isinstance(model_output, tuple) and len(model_output) == 3:
-                image_features, text_features, attention_map = model_output
-            else:
-                image_features, text_features = model_output
-        
-        # 第三轮新增：训练时的正则化技术
-        if self.use_enhanced_regularization and self.model.training:
-            image_features, text_features = self._apply_regularization(image_features, text_features)
-        
-        return image_features, text_features, image_global, image_local, attention_map
-    
-    def _compute_loss(self, image_features, text_features, image_global=None, image_local=None, attention_map=None, masks=None):
-        """计算总损失，包含多视角损失和正则化损失"""
-        # 多视角损失组合
-        loss = 0.0
-        
-        # 融合视角
-        loss = loss + self.mv_weight_fused * self.criterion(image_features, text_features)
-        
-        # 全局视角
-        if image_global is not None:
-            loss = loss + self.mv_weight_global * self.criterion(image_global, text_features)
-            
-        # 局部视角
-        if image_local is not None:
-            loss = loss + self.mv_weight_local * self.criterion(image_local, text_features)
-        
-        # 添加mask监督损失
-        if attention_map is not None and masks is not None and self.mask_supervision_enabled:
-            mask_loss = self.mask_supervision_loss(attention_map, masks)
-            loss = loss + self.mask_supervision_weight * mask_loss
-        
-        # 添加attention正则化损失
-        if attention_map is not None and self.attention_regularization_enabled:
-            # 熵正则化
-            entropy_loss = self.attention_entropy_loss(attention_map)
-            loss = loss + entropy_loss
-            
-            # Inside/Outside对比损失
-            if masks is not None and self.inside_outside_enabled:
-                io_loss = self.attention_io_loss(attention_map, masks)
-                loss = loss + self.inside_outside_weight * io_loss
-        
-        # 第三轮新增：梯度惩罚正则化
-        if self.use_enhanced_regularization:
-            gradient_penalty = self.regularization_config.get('gradient_penalty_weight', 0.0)
-            if gradient_penalty > 0:
-                grad_penalty = self._compute_gradient_penalty(image_features, text_features)
-                loss = loss + gradient_penalty * grad_penalty
-        
-        return loss
     
     def _create_optimizer(self) -> optim.Optimizer:
         """创建优化器，支持分层学习率还有新添加的lora优化"""
@@ -1181,10 +1061,6 @@ class Trainer:
                     else:
                         text_inputs = text_tokens.to(self.device)
                 
-                # 获取mask数据
-                masks = batch.get('mask') if isinstance(batch, dict) else None
-                attention_map = None
-                
                 # 前向传播（支持混合精度）
                 if self.use_mixed_precision:
                     try:
@@ -1195,131 +1071,230 @@ class Trainer:
                         # 回退到旧的API
                         from torch.cuda.amp import autocast
                         autocast_ctx = autocast()
-                    
+                    # autocast_ctx是一个上下文管理器，用于启用混合精度训练。
+                    # 它通过自动选择合适的数值精度（FP16 或 FP32），在保证计算稳定性的同时提高训练效率并减少显存占用。
                     with autocast_ctx:
-                        # 执行前向传播
-                        image_features, text_features, image_global, image_local, attention_map = self._forward_pass(
-                            images, text_inputs, masks, debug_mode
-                        )
+                        # # 为模型前向传播添加debug信息
+                        # if debug_mode:
+                        # print(f"  开始前向传播...")
+                        # print(f"  输入图像形状: {images.shape if hasattr(images, 'shape') else type(images)}")
+                        # print(f"  输入文本类型: {type(text_inputs)}")
+                    
+                        # image_features, text_features = self.model(images, text_inputs, debug=debug_mode)
+                        masks = batch.get('mask') if isinstance(batch, dict) else None  # 注意：数据集中使用'mask'而不是'masks'
+                                attention_map = None
+                            
+                            if hasattr(self.model, 'core'):
+                        # 如果有 core 属性，直接调用核心模型
+                            if masks is not None:
+                                result = self.model.core(images, text_inputs, masks=masks)
+                        else:
+                                result = self.model.core(images, text_inputs)
+                                image_features = result['image_features']
+                                text_features = result['text_features']
+                                image_global = result.get('image_global', None)
+                                image_local = result.get('image_local', None)
+                                attention_map = result.get('attention_map', None)
+                        else:
+                        # 否则使用原来的方式
+                                model_output = self.model(images, text_inputs, masks=masks, debug=debug_mode)
+                        # 处理可能返回3个值的情况（包含attention_map）
+                        if isinstance(model_output, tuple) and len(model_output) == 3:
+                                image_features, text_features, attention_map = model_output
+                        else:
+                                image_features, text_features = model_output
+        
+                        # 第三轮新增：训练时的正则化技术
+                        if self.use_enhanced_regularization and self.model.training:
+                                image_features, text_features = self._apply_regularization(image_features, text_features)
+        
+                        # if debug_mode:
+                        # print(f"  图像特征形状: {image_features.shape}")
+                        # print(f"  文本特征形状: {text_features.shape}")
+
+                        # 多视角损失组合
+                                loss = 0.0
+                        # 融合视角
+                                loss = loss + self.mv_weight_fused * self.criterion(image_features, text_features)
+                        # 全局视角
+                        if image_global is not None:
+                                loss = loss + self.mv_weight_global * self.criterion(image_global, text_features)
+                        # 局部视角
+                        if image_local is not None:
+                                loss = loss + self.mv_weight_local * self.criterion(image_local, text_features)
+                    
+                        # 添加mask监督损失
+                            if attention_map is not None and masks is not None and self.mask_supervision_enabled:
+                                mask_loss = self.mask_supervision_loss(attention_map, masks)
+                                loss = loss + self.mask_supervision_weight * mask_loss
+                    
+                        # 添加attention正则化损失
+                        if attention_map is not None and self.attention_regularization_enabled:
+                        # 熵正则化
+                                entropy_loss = self.attention_entropy_loss(attention_map)
+                                loss = loss + entropy_loss
                         
-                        # 计算损失
-                        loss = self._compute_loss(
-                            image_features, text_features, image_global, image_local, attention_map, masks
-                        )
-                        
-                        # 检查损失有效性
+                        # Inside/Outside对比损失
+                            if masks is not None and self.inside_outside_enabled:
+                                io_loss = self.attention_io_loss(attention_map, masks)
+                                loss = loss + self.inside_outside_weight * io_loss
+                    
+                        # 第三轮新增：梯度惩罚正则化
+                        if self.use_enhanced_regularization:
+                            gradient_penalty = self.regularization_config.get('gradient_penalty_weight', 0.0)
+                        if gradient_penalty > 0:
+                            grad_penalty = self._compute_gradient_penalty(image_features, text_features)
+                                loss = loss + gradient_penalty * grad_penalty
                         if not torch.isfinite(loss):
                             print("  警告: loss 非有限 (NaN/Inf)，跳过该batch")
+                        # 清理梯度和scaler状态
                             self.optimizer.zero_grad()
-                            if self.use_mixed_precision:
-                                self._unscaled_this_step = False
+                        if self.use_mixed_precision:
+                        # 重置mixed precision状态
+                            self._unscaled_this_step = False
                             continue
-                        
                         # 归一化损失（用于梯度累计）
-                        loss = loss / grad_accum_steps
-                        
-                        # 反向传播
-                        self.scaler.scale(loss).backward()
-                else:
-                    # 标准精度前向传播
-                    image_features, text_features, image_global, image_local, attention_map = self._forward_pass(
-                        images, text_inputs, masks, debug_mode
-                    )
-                    
-                    # 计算损失
-                    loss = self._compute_loss(
-                        image_features, text_features, image_global, image_local, attention_map, masks
-                    )
-                    
-                    # 检查损失有效性
-                    if not torch.isfinite(loss):
-                        print("  警告: loss 非有限 (NaN/Inf)，跳过该batch")
-                        self.optimizer.zero_grad()
-                        continue
-                    
-                    # 归一化损失（用于梯度累计）
-                    loss = loss / grad_accum_steps
-                    
-                    # 反向传播
-                    loss.backward()
+                                loss = loss / grad_accum_steps
                 
-                # 梯度累计逻辑
-                if (batch_idx + 1) % grad_accum_steps == 0 or (batch_idx + 1) == num_batches:
-                    if self.use_mixed_precision:
-                        # 混合精度训练的优化器步骤 - 完全修复版
-                        try:
-                            # 确保unscale标志初始化
-                            if not hasattr(self, '_unscaled_this_step'):
-                                self._unscaled_this_step = False
-                            
-                            # 只在需要梯度裁剪且还未unscale时才调用unscale
-                            if grad_clip_val > 0 and not self._unscaled_this_step:
-                                self.scaler.unscale_(self.optimizer)
-                                self._unscaled_this_step = True
-                                torch.nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_val)
-                            elif grad_clip_val > 0 and self._unscaled_this_step:
-                                # 如果已经unscale过，直接进行梯度裁剪
-                                torch.nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_val)
+                        # 反向传播
+                            self.scaler.scale(loss).backward()
+                        else:
+                        # # 为模型前向传播添加debug信息
+                        # if debug_mode:
+                        # print(f"  开始前向传播（标准精度）...")
+                        # print(f"  输入图像形状: {images.shape if hasattr(images, 'shape') else type(images)}")
+                        # print(f"  输入文本类型: {type(text_inputs)}")
+                
+                        # image_features, text_features = self.model(images, text_inputs, debug=debug_mode)
+                        masks = batch.get('mask') if isinstance(batch, dict) else None  # 注意：数据集中使用'mask'而不是'masks'
+                                attention_map = None
+                
+                            if hasattr(self.model, 'core'):
+                        # 如果有 core 属性，直接调用核心模型
+                            if masks is not None:
+                                result = self.model.core(images, text_inputs, masks=masks)
+                        else:
+                                result = self.model.core(images, text_inputs)
+                                image_features = result['image_features']
+                                text_features = result['text_features']
+                                image_global = result.get('image_global', None)
+                                image_local = result.get('image_local', None)
+                                attention_map = result.get('attention_map', None)
+                        else:
+                        # 否则使用原来的方式
+                                model_output = self.model(images, text_inputs, masks=masks, debug=debug_mode)
+                        # 处理可能返回3个值的情况（包含attention_map）
+                        if isinstance(model_output, tuple) and len(model_output) == 3:
+                                image_features, text_features, attention_map = model_output
+                        else:
+                                image_features, text_features = model_output
+        
+                        # if debug_mode:
+                        # print(f"  图像特征形状: {image_features.shape}")
+                        # print(f"  文本特征形状: {text_features.shape}")
 
-                            # 执行优化器步骤
+                        # 多视角损失组合
+                                loss = 0.0
+                        # 融合视角
+                                loss = loss + self.mv_weight_fused * self.criterion(image_features, text_features)
+                        # 全局视角
+                        if image_global is not None:
+                                loss = loss + self.mv_weight_global * self.criterion(image_global, text_features)
+                        # 局部视角
+                        if image_local is not None:
+                                loss = loss + self.mv_weight_local * self.criterion(image_local, text_features)
+                
+                        # 添加mask监督损失（与混合精度训练相同）
+                            if attention_map is not None and masks is not None and self.mask_supervision_enabled:
+                                mask_loss = self.mask_supervision_loss(attention_map, masks)
+                                loss = loss + self.mask_supervision_weight * mask_loss
+                
+                        # 添加attention正则化损失
+                        if attention_map is not None and self.attention_regularization_enabled:
+                        # 熵正则化
+                                entropy_loss = self.attention_entropy_loss(attention_map)
+                                loss = loss + entropy_loss
+                    
+                        # Inside/Outside对比损失
+                            if masks is not None and self.inside_outside_enabled:
+                                io_loss = self.attention_io_loss(attention_map, masks)
+                                loss = loss + self.inside_outside_weight * io_loss
+                
+                        if not torch.isfinite(loss):
+                            print("  警告: loss 非有限 (NaN/Inf)，跳过该batch")
+                        # 清理梯度状态
+                            self.optimizer.zero_grad()
+                            continue
+                        # 归一化损失（用于梯度累计）
+                                loss = loss / grad_accum_steps
+                
+                        # 反向传播
+                            loss.backward()
+            
+                        # 梯度累计逻辑
+                        if (batch_idx + 1) % grad_accum_steps == 0 or (batch_idx + 1) == num_batches:
+                        if self.use_mixed_precision:
+                        # 混合精度训练的优化器步骤 - 修复unscale错误
+                        try:
+                        if grad_clip_val > 0:
+                        # 检查是否已经unscale过
+                        if not hasattr(self, '_unscaled_this_step') or not self._unscaled_this_step:
+                            self.scaler.unscale_(self.optimizer)
+                            self._unscaled_this_step = True
+                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_val)
+
+                        # 检查梯度是否有效
+                        if self._check_gradients_finite():
                             self.scaler.step(self.optimizer)
+                        else:
+                            print("  警告: 检测到无效梯度，跳过优化器步骤")
+
                             self.scaler.update()
                             self.optimizer.zero_grad()
 
-                            # 重置unscale标志
+                        # 重置unscale标志
                             self._unscaled_this_step = False
 
                         except RuntimeError as e:
-                            if "unscale_() has already been called" in str(e):
-                                print(f"  混合精度错误，强制重置: {e}")
-                                # 强制重置所有状态
-                                try:
-                                    self.scaler.update()
-                                except:
-                                    pass
-                                self.optimizer.zero_grad()
-                                self._unscaled_this_step = False
-                                # 跳过这次更新，继续下一个batch
-                                continue
-                            else:
-                                print(f"  其他混合精度错误: {e}")
-                                # 也强制重置
-                                try:
-                                    self.scaler.update()
-                                except:
-                                    pass
-                                self.optimizer.zero_grad()
-                                self._unscaled_this_step = False
-                                continue
-                    else:
-                        # 标准训练的优化器步骤
-                        if grad_clip_val > 0:
-                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_val)
-                        
-                        self.optimizer.step()
-                        self.optimizer.zero_grad()
+                        if "unscale_() has already been called" in str(e):
+                            print(f"  混合精度错误，重置scaler: {e}")
+                        # 强制重置scaler状态
+                            self.scaler.update()
+                            self.optimizer.zero_grad()
+                            self._unscaled_this_step = False
+                        # 跳过这次更新，继续下一个batch
+                            continue
+                        else:
+                            raise e
+                else:
+                # 标准训练的优化器步骤
+                if grad_clip_val > 0:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_val)
                     
-                    # 更新学习率
-                    if hasattr(self.scheduler, 'step'):
-                        self.scheduler.step()
-                    
-                    # 更新EMA
-                    self._update_ema()
-                    
-                    self.global_step += 1
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
                 
+                # 更新学习率
+                if hasattr(self.scheduler, 'step'):
+                    self.scheduler.step()
+                
+                # 更新EMA
+                    self._update_ema()
+                
+                    self.global_step += 1
+            
                 # 如果到达这里说明batch处理成功
                 # 更新统计
-                total_loss += loss.item() * grad_accum_steps
-                successful_batches += 1
-                avg_loss = total_loss / successful_batches
+                    total_loss += loss.item() * grad_accum_steps
+                    successful_batches += 1
+                    avg_loss = total_loss / successful_batches
                 
                 # 重置连续失败计数器
-                consecutive_failures = 0
+                    consecutive_failures = 0
                 
                 # 计算batch处理时间
-                batch_end_time = time.time()
-                batch_time = batch_end_time - batch_start_time
+                    batch_end_time = time.time()
+                    batch_time = batch_end_time - batch_start_time
                 
                 # 统计正常速度的batch
                 if batch_time < slow_batch_threshold:
@@ -1327,13 +1302,13 @@ class Trainer:
                 elif batch_time > slow_batch_threshold * 2:  # 超过60秒的batch
                     print(f"  警告: batch {batch_idx} 处理时间异常长: {batch_time:.1f}s")
                 
-                progress_bar.set_postfix({
+                    progress_bar.set_postfix({
                     'loss': f'{avg_loss:.4f}',
                     'lr': f'{self.optimizer.param_groups[0]["lr"]:.2e}',
                     'success': f'{successful_batches}/{batch_idx+1}',
                     'skipped': skipped_batches,
                     'time': f'{batch_time:.1f}s'
-                })
+                    })
                 
                 # 内存清理
                 if batch_idx % 10 == 0 and torch.cuda.is_available():
@@ -1464,7 +1439,7 @@ class Trainer:
                         
                         # 前向传播
                         if hasattr(validation_model, 'core'):
-                        # 如果有 core 属性，直接调用核心模型
+                            # 如果有 core 属性，直接调用核心模型
                             # 兼容 'mask' 与 'masks' 两种键名
                             masks = None
                             if isinstance(batch, dict):

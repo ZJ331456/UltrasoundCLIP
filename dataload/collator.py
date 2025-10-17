@@ -153,10 +153,45 @@ class DataCollator:
         
         # 整理其他信息
         image_paths = [item['image_path'] for item in batch]
+        # 可选：掩码
+        has_any_mask = any('mask' in item for item in batch)
+        masks = None
+        if has_any_mask:
+            mask_list = []
+            for item in batch:
+                m = item.get('mask')
+                if m is None:
+                    # 缺失掩码的样本用全零替代，保持batch对齐
+                    _, _, H, W = images.shape
+                    mask_list.append(torch.zeros(1, H, W, dtype=torch.float32))
+                else:
+                    # 保证是 [1,H,W]
+                    if m.dim() == 2:
+                        m = m.unsqueeze(0)
+                    elif m.dim() == 3 and m.shape[0] != 1:
+                        m = m[:1]
+                    # 转为 float 并 clamp 到 [0,1]
+                    if m.dtype != torch.float32:
+                        m = m.float()
+                    m = m.clamp(0.0, 1.0)
+                    mask_list.append(m)
+            # 与图像尺寸再次对齐（如果必要）
+            if len(mask_list) == len(batch):
+                # 统一到 images 形状
+                _, _, H, W = images.shape
+                mask_aligned = []
+                for m in mask_list:
+                    if m.shape[-2:] != (H, W):
+                        m = torch.nn.functional.interpolate(m.unsqueeze(0), size=(H, W), mode='nearest').squeeze(0)
+                    mask_aligned.append(m)
+                masks = torch.stack(mask_aligned)
         
-        return {
+        result = {
             'images': images,
             'text_tokens': text_tokens,
             'texts': texts,
             'image_paths': image_paths
         }
+        if masks is not None:
+            result['masks'] = masks
+        return result

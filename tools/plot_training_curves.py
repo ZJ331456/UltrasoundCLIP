@@ -291,10 +291,10 @@ if __name__ == "__main__":
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='从日志文件生成训练曲线图')
     parser.add_argument('--log_file', type=str, 
-                       default='/media/ps/data-ssd/UltrasoundRAG/CLIP/logs/training_convnext_config_2_combined_best_all_data.log',
+                       default='/media/ps/data-ssd/UltrasoundRAG/CLIP/logs/training_convnext_config_2_combined_best_all_data_mask_balance_data_v1.log',
                        help='日志文件路径')
     parser.add_argument('--output', type=str,
-                       default='/media/ps/data-ssd/UltrasoundRAG/CLIP/png/convnext/training_convnext_config_2_combined_best_all_data.png',
+                       default='/media/ps/data-ssd/UltrasoundRAG/CLIP/png/convnext/training_convnext_config_2_combined_best_all_data_mask_balance_data_v1.png',
                        help='输出图片路径')
     
     args = parser.parse_args()

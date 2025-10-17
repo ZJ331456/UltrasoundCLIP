@@ -13,6 +13,7 @@ from .jsonl_dataset import JSONLDataset
 from .ultrasound_dataset import UltrasoundDataset  # 新增：导入超声数据集
 from .transforms import TransformFactory
 from .collator import DataCollator
+from .balanced_sampler import BalancedBatchSampler, StratifiedBatchSampler  # 新增：导入平衡采样器
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,8 @@ class DataLoaderFactory:
                         cache_size=cache_size,
                         target_image_size=image_size,
                         augment=is_training,  # 训练时启用增强
-                        ultrasound_specific=True
+                        ultrasound_specific=True,
+                        use_masks=data_config.get('use_masks', True)
                     )
                     logger.info(f"使用超声图像优化数据集: {split}")
                 else:
@@ -215,15 +217,30 @@ class DataLoaderFactory:
             model_path=model_path
         )
 
+        # 检查是否启用平衡采样
+        balanced_sampling_config = data_config.get('balanced_sampling', {})
+        use_balanced_sampling = balanced_sampling_config.get('enabled', False)
+        
         dataloaders = {}
         for split, dataset in datasets.items():
             shuffle = (split == 'train')
             drop_last = drop_last_train if split == 'train' else False
+            
+            # 为训练集创建平衡采样器
+            sampler = None
+            if split == 'train' and use_balanced_sampling:
+                sampler = DataLoaderFactory._create_balanced_sampler(
+                    dataset, batch_size, balanced_sampling_config
+                )
+                # 使用sampler时不能同时使用shuffle
+                shuffle = False
+                logger.info(f"为训练集启用平衡采样器: {type(sampler).__name__}")
 
             dataloaders[split] = DataLoader(
                 dataset,
                 batch_size=batch_size,
                 shuffle=shuffle,
+                sampler=sampler,
                 num_workers=num_workers,
                 collate_fn=collator,
                 pin_memory=True,  # 假设使用GPU
@@ -232,6 +249,50 @@ class DataLoaderFactory:
             )
 
         return dataloaders
+    
+    @staticmethod
+    def _create_balanced_sampler(dataset, batch_size: int, config: Dict[str, Any]):
+        """
+        创建平衡采样器
+        
+        Args:
+            dataset: 数据集对象
+            batch_size: 批次大小
+            config: 平衡采样配置
+        """
+        sampler_type = config.get('type', 'balanced')  # 'balanced' 或 'stratified'
+        num_classes_per_batch = config.get('num_classes_per_batch', 8)
+        samples_per_class = config.get('samples_per_class', None)
+        oversample_small_classes = config.get('oversample_small_classes', True)
+        max_oversample_ratio = config.get('max_oversample_ratio', 3.0)
+        shuffle = config.get('shuffle', True)
+        drop_last = config.get('drop_last', True)
+        class_key = config.get('class_key', 'class')
+        text_key = config.get('text_key', 'text')
+        
+        if sampler_type == 'stratified':
+            return StratifiedBatchSampler(
+                dataset=dataset,
+                batch_size=batch_size,
+                num_classes_per_batch=num_classes_per_batch,
+                shuffle=shuffle,
+                drop_last=drop_last,
+                class_key=class_key,
+                text_key=text_key
+            )
+        else:  # 默认使用balanced
+            return BalancedBatchSampler(
+                dataset=dataset,
+                batch_size=batch_size,
+                num_classes_per_batch=num_classes_per_batch,
+                samples_per_class=samples_per_class,
+                oversample_small_classes=oversample_small_classes,
+                max_oversample_ratio=max_oversample_ratio,
+                shuffle=shuffle,
+                drop_last=drop_last,
+                class_key=class_key,
+                text_key=text_key
+            )
     
     @staticmethod
     def get_dataset_info(datasets: Dict[str, Any]) -> Dict[str, Any]:

@@ -45,9 +45,66 @@ class ConvNeXtCLIPModel(nn.Module):
         self.image_processor = AutoImageProcessor.from_pretrained(self.vision_model_path)
         self.vision_encoder = ConvNextModel.from_pretrained(self.vision_model_path)
         self.image_projection = nn.Linear(vision_dim, self.embed_dim, bias=False)
+        # 多视角输出：为全局与局部表征分别提供投影头（与融合头并存）
+        self.image_projection_global = nn.Linear(vision_dim, self.embed_dim, bias=False)
+        self.image_projection_local = nn.Linear(vision_dim, self.embed_dim, bias=False)
         # 当使用 GAP 作为兜底或强制策略时，添加 LN 以更贴近 pooler 的数值风格
         self._gap = nn.AdaptiveAvgPool2d((1, 1))
         self._gap_ln = nn.LayerNorm(vision_dim, eps=1e-6)
+        
+        # ------------ 新增：实验方案配置 ------------
+        self.experiment_config = model_cfg.get("experiment_config", {})
+        # 掩码相关可调超参
+        self.mask_min_area_ratio: float = float(self.experiment_config.get("mask_min_area_ratio", 0.001))
+        self.mask_soften_kernel: int = int(self.experiment_config.get("mask_soften_kernel", 3))
+        self.gate_min: float = float(self.experiment_config.get("gate_min", 0.1))
+        self.gate_max: float = float(self.experiment_config.get("gate_max", 0.9))
+        self.local_global_alpha: float = float(self.experiment_config.get("local_global_alpha", 0.5))
+        
+        # 版本1：Attention Side-Head for Mask Supervision
+        self.use_attention_head = self.experiment_config.get("use_attention_head", False)
+        if self.use_attention_head:
+            # 注意力输出分支：将特征映射转换为attention map
+            self.attention_head = nn.Sequential(
+                nn.Conv2d(vision_dim, vision_dim // 2, kernel_size=3, padding=1),
+                nn.BatchNorm2d(vision_dim // 2),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(vision_dim // 2, 1, kernel_size=1),
+                nn.Sigmoid()  # 输出0-1的attention权重
+            )
+            # print("  - 启用Attention Side-Head进行mask监督")
+        
+        # 版本2：Gating机制
+        self.use_gating = self.experiment_config.get("use_gating", False)
+        if self.use_gating:
+            # Gate模块：决定local vs global的融合权重
+            self.fusion_gate = nn.Sequential(
+                nn.Linear(vision_dim * 2, vision_dim),
+                nn.ReLU(),
+                nn.Dropout(0.1),
+                nn.Linear(vision_dim, 1),
+                nn.Sigmoid()
+            )
+            # print("  - 启用Gating机制进行自适应融合")
+        
+        # 版本3：多尺度/局部patch
+        self.use_multi_scale = self.experiment_config.get("use_multi_scale", False)
+        if self.use_multi_scale:
+            # 多尺度卷积分支
+            self.multi_scale_branch = nn.ModuleList([
+                nn.Conv2d(vision_dim, vision_dim, kernel_size=1, stride=1),  # 细粒度
+                nn.Conv2d(vision_dim, vision_dim, kernel_size=3, stride=1, padding=1),  # 中等
+                nn.Conv2d(vision_dim, vision_dim, kernel_size=5, stride=1, padding=2),  # 粗粒度
+            ])
+            self.scale_fusion = nn.Conv2d(vision_dim * 3, vision_dim, kernel_size=1)
+            # print("  - 启用多尺度特征提取")
+        
+        # 版本4：稀疏注意力正则化
+        self.use_sparse_attention = self.experiment_config.get("use_sparse_attention", False)
+        self.attention_sparsity_weight = self.experiment_config.get("attention_sparsity_weight", 0.01)
+        if self.use_sparse_attention:
+            # print(f"  - 启用稀疏注意力正则化，权重: {self.attention_sparsity_weight}")
+            pass
 
         # 优化方法
         # self.attn_layer = nn.MultiheadAttention(embed_dim=vision_dim, num_heads=8, dropout=0.1, batch_first=True)
@@ -131,13 +188,36 @@ class ConvNeXtCLIPModel(nn.Module):
     #     image_features = F.normalize(image_features, dim=-1)
     #     return image_features
 
-    def encode_image(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """输入pixel_values，输出L2归一化之后的图像特征(病理表征+结构表征融合)"""
+    def encode_image(self, pixel_values: torch.Tensor, masks: Optional[torch.Tensor] = None) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        """输入pixel_values，输出L2归一化之后的图像特征(病理表征+结构表征融合)
+        可选参数 masks: [B,1,H,W] 取值{0,1}，用于局部加权。
+        若提供，将以mask为权重对空间特征做加权池化，并与全局表征做注意力融合。
+        
+        返回:
+            如果use_attention_head=True: (image_features, attention_map)
+            否则: image_features
+        """
         outputs = self.vision_encoder(pixel_values=pixel_values)
         last = outputs.last_hidden_state #[B, C, H, W]
 
         B, C, H, W = last.shape
         seq_len = H * W
+        
+        # 版本1：生成attention map用于mask监督
+        attention_map = None
+        if self.use_attention_head:
+            attention_map = self.attention_head(last)  # [B, 1, H, W]
+        
+        # 版本3：多尺度特征提取
+        if self.use_multi_scale:
+            multi_scale_features = []
+            for scale_conv in self.multi_scale_branch:
+                scale_feat = scale_conv(last)
+                multi_scale_features.append(scale_feat)
+            # 拼接并融合多尺度特征
+            multi_scale_concat = torch.cat(multi_scale_features, dim=1)  # [B, C*3, H, W]
+            last = self.scale_fusion(multi_scale_concat)  # [B, C, H, W]
+        
         # 结构表征(局部空间结构信息)
         struct_features = last.flatten(2).transpose(1, 2) #[B, C, H*W]?[B, HW, C]?
         # 添加位置编码：截取到seq_len
@@ -147,18 +227,111 @@ class ConvNeXtCLIPModel(nn.Module):
 
         # 病理表征(全局embedding)
         pooled_hw = self._gap(last).squeeze(-1).squeeze(-1)  # [B, C]
+
+        # 若提供掩码或使用attention map：局部表征(局部mask加权聚合)
+        effective_mask = masks  # 默认使用输入的mask
+        if self.use_attention_head and attention_map is not None and masks is None:
+            # 如果没有输入mask但有attention map，使用attention map作为soft mask
+            effective_mask = attention_map
+        
+        # 添加mask有效性检查
+        mask_valid = False
+        if effective_mask is not None and isinstance(effective_mask, torch.Tensor) and effective_mask.numel() > 0:
+            # print(f"DEBUG: 开始处理mask，原始shape: {effective_mask.shape}")
+            try:
+                # 统一设备与数据类型
+                if effective_mask.device != last.device or effective_mask.dtype != last.dtype:
+                    effective_mask = effective_mask.to(device=last.device, dtype=last.dtype)
+
+                # 规范维度到 [B,1,H,W]
+                if effective_mask.dim() == 4:
+                    pass
+                elif effective_mask.dim() == 3:
+                    effective_mask = effective_mask.unsqueeze(1)  # [B, H, W] -> [B, 1, H, W]
+                elif effective_mask.dim() == 2:
+                    effective_mask = effective_mask.unsqueeze(0).unsqueeze(0)  # [H, W] -> [1, 1, H, W]
+                else:
+                    raise ValueError(f"不支持的mask维度: {effective_mask.dim()}")
+
+                # 批大小对齐
+                if effective_mask.shape[0] != B:
+                    if effective_mask.shape[0] == 1:
+                        effective_mask = effective_mask.expand(B, -1, -1, -1)
+                    elif effective_mask.shape[0] > B:
+                        effective_mask = effective_mask[:B]
+                    else:
+                        repeat_times = B - effective_mask.shape[0]
+                        last_mask = effective_mask[-1:].repeat(repeat_times, 1, 1, 1)
+                        effective_mask = torch.cat([effective_mask, last_mask], dim=0)
+
+                # 无条件重采样到 (H, W)，避免上游尺寸不一致导致的隐式错误
+                effective_mask = torch.nn.functional.interpolate(effective_mask, size=(H, W), mode='nearest')
+
+                effective_mask = effective_mask.clamp(0, 1)
+
+                # 掩码软化（盒式平滑）
+                if self.mask_soften_kernel and self.mask_soften_kernel >= 3:
+                    k = int(self.mask_soften_kernel)
+                    if k % 2 == 0:
+                        k += 1
+                    pad = k // 2
+                    kernel = torch.ones((1, 1, k, k), device=effective_mask.device, dtype=effective_mask.dtype) / (k * k)
+                    eff_pad = torch.nn.functional.pad(effective_mask, (pad, pad, pad, pad), mode='replicate')
+                    eff_blur = torch.nn.functional.conv2d(eff_pad, kernel)
+                    effective_mask = eff_blur[:, :, pad:-pad, pad:-pad].clamp(0, 1)
+
+                # 再次确保与特征图一致（防御性编程）
+                if effective_mask.shape[-2:] != (H, W):
+                    effective_mask = torch.nn.functional.interpolate(effective_mask, size=(H, W), mode='nearest')
+
+                # 加权平均: sum(Feat * mask) / (sum(mask)+eps)
+                # 在乘法前做一次形状断言与一次性自动修复
+                if effective_mask.shape != (B, 1, H, W):
+                    # print(f"Warning: 掩码形状不规范，尝试自动修复: {effective_mask.shape} -> ({B},1,{H},{W})")
+                    effective_mask = effective_mask.reshape(B, 1, H, W)
+
+                masked_sum = (last * effective_mask).sum(dim=(-1, -2))  # [B,C]
+                mask_area = effective_mask.sum(dim=(-1, -2)).clamp(min=1e-6)  # [B,1]
+                local_feat = masked_sum / mask_area  # [B,C]
+
+                # 小面积掩码降权
+                mask_area_keepdim = effective_mask.sum(dim=(-1, -2), keepdim=True)
+                total_area = torch.tensor(float(H * W), device=effective_mask.device, dtype=effective_mask.dtype)
+                area_ratio = mask_area_keepdim / total_area
+                small_mask_flag = (area_ratio < self.mask_min_area_ratio).to(effective_mask.dtype)
+                safe_den = max(self.mask_min_area_ratio, 1e-6)
+                scale = torch.minimum(area_ratio / safe_den, torch.ones_like(area_ratio))
+                effective_mask = effective_mask * (small_mask_flag * scale + (1 - small_mask_flag))
+
+                # 版本2：使用gating机制融合
+                if self.use_gating:
+                    concat_feat = torch.cat([local_feat, pooled_hw], dim=1)  # [B, C*2]
+                    gate_weight = self.fusion_gate(concat_feat)  # [B, 1]
+                    gate_weight = gate_weight.clamp(min=self.gate_min, max=self.gate_max)
+                    pooled_hw = gate_weight * local_feat + (1 - gate_weight) * pooled_hw
+                else:
+                    alpha = self.local_global_alpha
+                    pooled_hw = (1 - alpha) * pooled_hw + alpha * local_feat
+
+                mask_valid = True
+                # print(f"DEBUG: mask处理成功，最终shape: {effective_mask.shape}")
+            except Exception as e:
+                # print(f"Warning: mask processing failed: {e}")
+                # print(f"  - effective_mask shape: {effective_mask.shape if 'effective_mask' in locals() else 'N/A'}")
+                # print(f"  - last shape: {last.shape}")
+                # print(f"  - B, C, H, W: {B}, {C}, {H}, {W}")
+                effective_mask = None
+                mask_valid = False
+                # print(f"  - 回退到全局特征处理")
+        else:
+            # 未提供有效mask时，构造一个温和的局部候选：使用结构序列简单平均作为局部代表
+            # 这样可以在无mask数据时仍然给出local embedding以参与多视角损失
+            local_feat = struct_features.mean(dim=1)  # [B, C]
+                
         patho_features = self._gap_ln(pooled_hw).unsqueeze(1)  # [B, 1, C]
 
         # ===== Cross-Attention 融合 =====
-        # 以病理表征为 Query，结构表征为 Key/Value
-        # nn.MultiheadAttention 输入格式是 [L, B, E]，所以要转置
-        # query = patho_features.transpose(0, 1)      # [1, B, C]
-        # key_value = struct_features.transpose(0, 1) # [HW, B, C]
-
-        # attn_layer = nn.MultiheadAttention(embed_dim=C, num_heads=8, batch_first=False).to(self.device_name)
-        # fused, _ = attn_layer(query, key_value, key_value)  # [1, B, C]
-        # fused = fused.squeeze(0)  # [B, C]
-        fused, _ = self.attn_layer(patho_features, struct_features, struct_features) #[B,1,C]
+        fused, attn_weights = self.attn_layer(patho_features, struct_features, struct_features) #[B,1,C]
         fused = fused.squeeze(1)  # [B, C]
 
         # 残差连接+线性层
@@ -166,7 +339,7 @@ class ConvNeXtCLIPModel(nn.Module):
         fused = F.gelu(fused) # 添加非线性激活，感觉区分度应该会大一些
         fused = self.dropout(fused)
 
-            # 新增防过拟合处理
+        # 新增防过拟合处理
         fused = self.feature_dropout(fused)
         fused = self.feature_ln(fused)
 
@@ -174,7 +347,21 @@ class ConvNeXtCLIPModel(nn.Module):
         fused = self.image_projection(fused)  # [B, D]
         fused = F.normalize(fused, dim=-1)
         image_features = fused
-        return image_features
+
+        # 全局与局部多视角嵌入
+        global_token = self._gap_ln(pooled_hw)
+        image_global = self.image_projection_global(global_token)
+        image_global = F.normalize(image_global, dim=-1)
+
+        local_token = self._gap_ln(local_feat) if 'local_feat' in locals() else self._gap_ln(pooled_hw)
+        image_local = self.image_projection_local(local_token)
+        image_local = F.normalize(image_local, dim=-1)
+        
+        # 版本1：返回attention map用于监督
+        if self.use_attention_head and self.training:
+            return image_features, attention_map
+        else:
+            return image_features
     def encode_text(self, texts_or_tokens) -> torch.Tensor:
         """编码文本或已分词的 tokens 映射，输出 L2 归一化文本特征。
         接受：
@@ -241,6 +428,7 @@ class ConvNeXtCLIPModel(nn.Module):
         pixel_values: torch.Tensor,
         texts: Optional[Union[List[str], Dict[str, torch.Tensor]]] = None,
         text_features: Optional[torch.Tensor] = None,
+        masks: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         """前向：计算图像特征、文本特征与相似度。
 
@@ -250,8 +438,17 @@ class ConvNeXtCLIPModel(nn.Module):
           - text_features:  [N, D]
           - logits_per_image: [B, N]
           - logits_per_text:  [N, B]
+          - attention_map: [B, 1, H, W] (仅在use_attention_head=True且training时)
         """
-        image_features = self.encode_image(pixel_values)
+        # 编码图像，可能返回attention map
+        encode_result = self.encode_image(pixel_values, masks=masks)
+        
+        # 处理返回值
+        if isinstance(encode_result, tuple):
+            image_features, attention_map = encode_result
+        else:
+            image_features = encode_result
+            attention_map = None
 
         if text_features is None:
             if texts is None:
@@ -267,12 +464,55 @@ class ConvNeXtCLIPModel(nn.Module):
         logits_per_image = logit_scale * image_features @ text_features.t()
         logits_per_text = logits_per_image.t()
 
-        return {
+        # 额外返回全局与局部嵌入，供多视角损失使用
+        # 为避免重复计算，这里简单地再次调用 encode_image 的内部缓存不可行，因此在上面构造时一并产生
+        # 为了最小改动，这里通过再次计算得到 global/local（开销可接受）；若需进一步优化，可重构 encode_image 返回多视角
+        # 复用上一步中的 pooled_hw/local_feat 需要调整 encode_image 的返回签名，暂不改动，转而在此重算
+        with torch.no_grad():
+            outputs_tmp = self.vision_encoder(pixel_values=pixel_values)
+            last_tmp = outputs_tmp.last_hidden_state
+            pooled_tmp = self._gap(last_tmp).squeeze(-1).squeeze(-1)
+        image_global = F.normalize(self.image_projection_global(self._gap_ln(pooled_tmp)), dim=-1)
+
+        # 计算一个稳健的local（无mask则用结构平均）
+        Btmp, Ctmp, Htmp, Wtmp = last_tmp.shape
+        struct_tmp = last_tmp.flatten(2).transpose(1, 2)
+        if masks is not None and isinstance(masks, torch.Tensor) and masks.numel() > 0:
+            try:
+                m = masks
+                if m.device != last_tmp.device or m.dtype != last_tmp.dtype:
+                    m = m.to(device=last_tmp.device, dtype=last_tmp.dtype)
+                if m.dim() == 3:
+                    m = m.unsqueeze(1)
+                if m.shape[0] != Btmp:
+                    if m.shape[0] == 1:
+                        m = m.expand(Btmp, -1, -1, -1)
+                    elif m.shape[0] > Btmp:
+                        m = m[:Btmp]
+                    else:
+                        m = torch.cat([m, m[-1:].repeat(Btmp - m.shape[0], 1, 1, 1)], dim=0)
+                m = torch.nn.functional.interpolate(m, size=(Htmp, Wtmp), mode='nearest').clamp(0, 1)
+                local_tmp = (last_tmp * m).sum(dim=(-1, -2)) / m.sum(dim=(-1, -2)).clamp(min=1e-6)
+            except Exception:
+                local_tmp = struct_tmp.mean(dim=1)
+        else:
+            local_tmp = struct_tmp.mean(dim=1)
+        image_local = F.normalize(self.image_projection_local(self._gap_ln(local_tmp)), dim=-1)
+
+        result = {
             "image_features": image_features,
             "text_features": text_features,
             "logits_per_image": logits_per_image,
             "logits_per_text": logits_per_text,
+            "image_global": image_global,
+            "image_local": image_local,
         }
+        
+        # 如果有attention map，添加到返回结果中
+        if attention_map is not None:
+            result["attention_map"] = attention_map
+            
+        return result
 
 
 def build_convnext_clip_from_config(config: Dict[str, Any]) -> ConvNeXtCLIPModel:
@@ -323,59 +563,69 @@ class ConvNeXtCLIPTrainingWrapper(nn.Module):
         # 兼容peft的调用方式！
         
         # 添加更详细的调试信息
-        print(f"DEBUG: args 长度 = {len(args)}")
-        print(f"DEBUG: args 类型 = {[type(arg) for arg in args]}")
-        print(f"DEBUG: kwargs 键 = {list(kwargs.keys())}")
+        # print(f"DEBUG: args 长度 = {len(args)}")
+        # print(f"DEBUG: args 类型 = {[type(arg) for arg in args]}")
+        # print(f"DEBUG: kwargs 键 = {list(kwargs.keys())}")
         
-        # 检查是否有图像相关的参数
+        # 检查是否有图像/掩码相关的参数
         image_keys = ['images', 'pixel_values', 'image', 'input_images']
         text_keys = ['text_inputs', 'input_ids', 'texts', 'text', 'text_tokens']
+        mask_keys = ['masks', 'mask']
         
-        print(f"DEBUG: 查找图像参数...")
+        # print(f"DEBUG: 查找图像参数...")
         for key in image_keys:
             if key in kwargs:
-                print(f"DEBUG: 找到图像参数 '{key}': {type(kwargs[key])}")
+                # print(f"DEBUG: 找到图像参数 '{key}': {type(kwargs[key])}")
+                pass
         
-        print(f"DEBUG: 查找文本参数...")
+        # print(f"DEBUG: 查找文本参数...")
         for key in text_keys:
             if key in kwargs:
-                print(f"DEBUG: 找到文本参数 '{key}': {type(kwargs[key])}")
+                # print(f"DEBUG: 找到文本参数 '{key}': {type(kwargs[key])}")
+                pass
         
         # 处理位置参数
         if len(args) >= 1:
             images = args[0]
-            print(f"DEBUG: 从 args[0] 获取 images: {type(images)}")
+            # print(f"DEBUG: 从 args[0] 获取 images: {type(images)}")
         elif 'images' in kwargs:
             images = kwargs['images']
-            print(f"DEBUG: 从 kwargs['images'] 获取 images: {type(images)}")
+            # print(f"DEBUG: 从 kwargs['images'] 获取 images: {type(images)}")
         elif 'pixel_values' in kwargs:
             images = kwargs['pixel_values']
-            print(f"DEBUG: 从 kwargs['pixel_values'] 获取 images: {type(images)}")
+            # print(f"DEBUG: 从 kwargs['pixel_values'] 获取 images: {type(images)}")
         else:
             images = None
-            print("DEBUG: images 为 None")
+            # print("DEBUG: images 为 None")
             
         if len(args) >= 2:
             text_inputs = args[1]
-            print(f"DEBUG: 从 args[1] 获取 text_inputs: {type(text_inputs)}")
+            # print(f"DEBUG: 从 args[1] 获取 text_inputs: {type(text_inputs)}")
         elif 'text_inputs' in kwargs:
             text_inputs = kwargs['text_inputs']
-            print(f"DEBUG: 从 kwargs['text_inputs'] 获取 text_inputs: {type(text_inputs)}")
+            # print(f"DEBUG: 从 kwargs['text_inputs'] 获取 text_inputs: {type(text_inputs)}")
         elif 'input_ids' in kwargs:
             text_inputs = kwargs['input_ids']
-            print(f"DEBUG: 从 kwargs['input_ids'] 获取 text_inputs: {type(text_inputs)}")
+            # print(f"DEBUG: 从 kwargs['input_ids'] 获取 text_inputs: {type(text_inputs)}")
         else:
             text_inputs = None
-            print("DEBUG: text_inputs 为 None")
+            # print("DEBUG: text_inputs 为 None")
             
         # 从 kwargs 中获取 debug 参数
         debug = kwargs.get('debug', False)
         
+        # 可选掩码
+        masks = None
+        for key in mask_keys:
+            if key in kwargs:
+                masks = kwargs[key]
+                break
+        
         # 确保必要参数存在
         if images is None:
-            print(f"DEBUG: 所有可用的参数:")
-            print(f"  - args: {args}")
-            print(f"  - kwargs: {kwargs}")
+            # print(f"DEBUG: 所有可用的参数:")
+            # print(f"  - args: {args}")
+            # print(f"  - kwargs: {kwargs}")
             raise ValueError("images 参数不能为空")
         if text_inputs is None:
             raise ValueError("text_inputs 参数不能为空")
@@ -389,6 +639,19 @@ class ConvNeXtCLIPTrainingWrapper(nn.Module):
         # 文本编码
         text_features = self.core.encode_text(text_inputs)
         # 图像编码
-        image_features = self.core.encode_image(pixel_values)
-
-        return image_features, text_features
+        if masks is not None and isinstance(masks, torch.Tensor):
+            masks = masks.to(self.core.device_name)
+        
+        # 调用core的forward方法获取完整结果
+        result = self.core.forward(pixel_values, text_inputs, masks=masks)
+        
+        # 提取特征
+        image_features = result['image_features']
+        text_features = result['text_features']
+        
+        # 返回格式兼容旧代码，但支持扩展返回attention map
+        if 'attention_map' in result and self.core.training:
+            # 训练时返回额外的attention map用于监督
+            return image_features, text_features, result['attention_map']
+        else:
+            return image_features, text_features

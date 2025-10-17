@@ -38,7 +38,8 @@ class UltrasoundDataset(BaseDataset):
                  cache_size: int = 500,
                  target_image_size: int = 224,
                  augment: bool = True,
-                 ultrasound_specific: bool = True):
+                 ultrasound_specific: bool = True,
+                 use_masks: bool = True):
         """
         初始化超声图像数据集
         Args:
@@ -55,6 +56,7 @@ class UltrasoundDataset(BaseDataset):
         self.target_image_size = target_image_size
         self.augment = augment
         self.ultrasound_specific = ultrasound_specific
+        self.use_masks = use_masks
         
         # 调用父类初始化
         super().__init__(transform=transform, max_samples=max_samples, cache_size=cache_size)
@@ -81,7 +83,9 @@ class UltrasoundDataset(BaseDataset):
         logger.info(f"超声图像数据集加载完成: {len(self.samples)} 个样本")
     
     def _load_samples(self) -> List[Tuple[str, str]]:
-        """加载样本数据，支持多种JSON格式"""
+        """加载样本数据，支持多种JSON格式
+        返回元素：(img_path, caption, seg_path_or_None)
+        """
         try:
             with open(self.json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -95,9 +99,10 @@ class UltrasoundDataset(BaseDataset):
                 # 兼容多种键名
                 img_path = item.get('data_path') or item.get('image_path') or item.get('image')
                 caption = item.get('refined_caption') or item.get('CLIPcaption') or item.get('caption') or item.get('text')
+                seg_path = item.get('seg_path') or item.get('mask_path')
                 
                 if img_path and caption:
-                    samples.append((img_path, caption))
+                    samples.append((img_path, caption, seg_path))
             
             # 限制样本数量
             if self.max_samples and len(samples) > self.max_samples:
@@ -115,9 +120,14 @@ class UltrasoundDataset(BaseDataset):
         valid_samples = []
         invalid_count = 0
         
-        for img_path, caption in self.samples:
+        for img_path, caption, seg_path in self.samples:
             if os.path.exists(img_path):
-                valid_samples.append((img_path, caption))
+                # seg_path 可选，仅在存在时校验
+                if seg_path and not os.path.isabs(seg_path):
+                    # 允许相对路径但不强制校验存在性（兼容历史数据）
+                    valid_samples.append((img_path, caption, seg_path))
+                else:
+                    valid_samples.append((img_path, caption, seg_path))
             else:
                 invalid_count += 1
                 logger.warning(f"图像文件不存在: {img_path}")
@@ -194,7 +204,7 @@ class UltrasoundDataset(BaseDataset):
     
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         """获取单个样本"""
-        image_path, text = self.samples[idx]
+        image_path, text, seg_path = self.samples[idx]
         
         # 加载图像
         image = self._cached_load_image(image_path)
@@ -203,18 +213,79 @@ class UltrasoundDataset(BaseDataset):
             image = self._get_placeholder_image()
             logger.warning(f"使用占位符图像替代: {image_path}")
         
-        # 应用超声图像特定变换
-        if self.ultrasound_specific and hasattr(self, 'ultrasound_transforms'):
-            image = self.ultrasound_transforms(image)
-        elif self.transform:
-            # 使用通用变换
-            image = self.transform(image)
-        
-        return {
-            'images': image,  # 保持与现有接口一致
-            'text': text,
-            'image_path': image_path
-        }
+        # 是否存在掩码
+        has_mask = self.use_masks and isinstance(seg_path, str) and os.path.exists(seg_path)
+
+        # 若有掩码：使用确定性的几何处理，保证图像与掩码对齐
+        if has_mask:
+            # 1) 加载掩码，转为二值PIL单通道，支持 .npy/.npz 与 常见图像格式
+            try:
+                import numpy as np
+                from PIL import Image
+                lower_path = seg_path.lower()
+                if lower_path.endswith('.npy') or lower_path.endswith('.npz'):
+                    arr = np.load(seg_path)
+                    if hasattr(arr, 'item') and isinstance(arr, np.ndarray) is False:
+                        # npz 可能返回字典式对象，尝试取第一个数组
+                        try:
+                            arr = list(arr.values())[0]
+                        except Exception:
+                            pass
+                else:
+                    # 以PIL方式读取灰度图
+                    pil_mask = Image.open(seg_path).convert('L')
+                    arr = np.array(pil_mask)
+
+                # 标准化为二维布尔掩码
+                if arr.ndim == 2:
+                    mask_bool = (arr > 0)
+                elif arr.ndim == 3:
+                    mask_bool = (arr != 0).any(axis=-1)
+                else:
+                    mask_bool = (arr != 0)
+
+                mask_img = Image.fromarray((mask_bool.astype('uint8') * 255), mode='L')
+            except Exception as e:
+                logger.warning(f"掩码加载失败 {seg_path}: {e}")
+                mask_img = None
+                has_mask = False
+
+        # 对齐与张量化
+        if has_mask and mask_img is not None:
+            # 仅做等比例缩放+填充，保证几何一致
+            resize = ResizeWithPadding(self.target_image_size)
+            image_proc = resize(image)
+            mask_proc = resize(mask_img)
+
+            # 转tensor
+            to_tensor = transforms.ToTensor()
+            image_tensor = to_tensor(image_proc)
+            mask_tensor = to_tensor(mask_proc)  # [1,H,W] 且为0..1
+            # 进一步标准化掩码到 {0,1} 浮点
+            mask_tensor = (mask_tensor > 0.5).float()
+
+            # 归一化到与训练一致的分布
+            normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+            image_tensor = normalize(image_tensor)
+
+            sample = {
+                'images': image_tensor,
+                'text': text,
+                'image_path': image_path,
+                'mask': mask_tensor
+            }
+            return sample
+        else:
+            # 无掩码：沿用既有增强流水线
+            if self.ultrasound_specific and hasattr(self, 'ultrasound_transforms'):
+                image = self.ultrasound_transforms(image)
+            elif self.transform:
+                image = self.transform(image)
+            return {
+                'images': image,
+                'text': text,
+                'image_path': image_path
+            }
 
 
 class ResizeWithPadding:
@@ -225,26 +296,35 @@ class ResizeWithPadding:
     
     def __init__(self, target_size: int, fill_color: Tuple[int, int, int] = (128, 128, 128)):
         self.target_size = target_size
-        self.fill_color = fill_color
+        self.fill_color = fill_color  # 用于RGB图；灰度图将自动使用单通道整数
     
     def __call__(self, im: Image.Image) -> Image.Image:
         orig_w, orig_h = im.size
-        
+        # 避免0尺寸导致的异常
+        if orig_w <= 0 or orig_h <= 0:
+            # 直接返回一个目标大小的空图（灰或黑）
+            color = 0 if im.mode == 'L' else self.fill_color
+            return Image.new(im.mode, (self.target_size, self.target_size), color)
+
         # 若任一边超过目标尺寸，按比例缩放
         if orig_w > self.target_size or orig_h > self.target_size:
             scale = self.target_size / max(orig_w, orig_h)
-            new_w, new_h = int(orig_w * scale), int(orig_h * scale)
-            im = im.resize((new_w, new_h), Image.BILINEAR)
+            new_w, new_h = max(1, int(orig_w * scale)), max(1, int(orig_h * scale))
+            # 掩码(灰度)使用最近邻插值，彩色使用双线性
+            resample = Image.NEAREST if im.mode == 'L' else Image.BILINEAR
+            im = im.resize((new_w, new_h), resample)
         else:
             new_w, new_h = orig_w, orig_h
-        
+
         # 计算需要填充的像素数
         pad_w, pad_h = self.target_size - new_w, self.target_size - new_h
-        
+
         # 左、上、右、下四个方向的填充，尽可能左右/上下对称
         padding = (pad_w // 2, pad_h // 2, pad_w - pad_w // 2, pad_h - pad_h // 2)
-        im = ImageOps.expand(im, padding, fill=self.fill_color)
-        
+        # 灰度图要求单通道填充色
+        fill = 0 if im.mode == 'L' else self.fill_color
+        im = ImageOps.expand(im, padding, fill=fill)
+
         return im
 
 

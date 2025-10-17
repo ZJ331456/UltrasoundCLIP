@@ -6,6 +6,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 from typing import Tuple
 
 
@@ -806,7 +807,177 @@ class UltrasoundFinegrainedLoss(nn.Module):
         
         return (focal_loss_i2t.mean() + focal_loss_t2i.mean()) / 2
 
-
+# 数据平衡之前！
+# class UltrasoundSimpleLoss(nn.Module):
+#     """
+#     超声图像简单高效损失函数
+#     支持硬标签和软标签两种模式
+#     基于CLIP损失 + 软标签学习 + 简单hard negative
+#     """
+    
+#     def __init__(self, temperature: float = 0.1, 
+#                  label_smoothing: float = 0.1,
+#                  hard_negative_ratio: float = 0.3,
+#                  margin: float = 0.2,
+#                  use_soft_label: bool = True,
+#                  soft_label_temp: float = 2.0,
+#                  soft_label_weight: float = 0.6):
+#         super().__init__()
+#         self.temperature = temperature
+#         self.label_smoothing = label_smoothing
+#         self.hard_negative_ratio = hard_negative_ratio
+#         self.margin = margin
+#         self.use_soft_label = use_soft_label
+#         self.soft_label_temp = soft_label_temp
+#         self.soft_label_weight = soft_label_weight
+        
+#     def forward(self, image_features: torch.Tensor, text_features: torch.Tensor) -> torch.Tensor:
+#         """
+#         支持软标签的损失计算
+#         Args:
+#             image_features: 图像特征 [batch_size, embed_dim]
+#             text_features: 文本特征 [batch_size, embed_dim]
+#         Returns:
+#             loss: 总损失
+#         """
+#         batch_size = image_features.size(0)
+#         device = image_features.device
+        
+#         # 确保特征已归一化
+#         image_features = F.normalize(image_features, p=2, dim=-1)
+#         text_features = F.normalize(text_features, p=2, dim=-1)
+        
+#         # 计算相似度矩阵
+#         sim_matrix = torch.matmul(image_features, text_features.T) / self.temperature
+        
+#         # 创建硬标签
+#         labels = torch.arange(batch_size, device=device, dtype=torch.long)
+        
+#         if self.use_soft_label:
+#             # 软标签模式：结合硬标签和软标签
+#             total_loss = self._compute_soft_hard_combined_loss(sim_matrix, labels, image_features, text_features)
+#         else:
+#             # 硬标签模式：原来的实现
+#             total_loss = self._compute_hard_label_loss(sim_matrix, labels)
+        
+#         return total_loss
+    
+#     def _compute_soft_hard_combined_loss(self, sim_matrix: torch.Tensor, labels: torch.Tensor, 
+#                                        image_features: torch.Tensor, text_features: torch.Tensor) -> torch.Tensor:
+#         """计算软硬标签结合的损失"""
+#         batch_size = sim_matrix.size(0)
+        
+#         # 1. 硬标签损失（带标签平滑）
+#         if self.label_smoothing > 0:
+#             loss_i2t = F.cross_entropy(sim_matrix, labels, label_smoothing=self.label_smoothing)
+#             loss_t2i = F.cross_entropy(sim_matrix.T, labels, label_smoothing=self.label_smoothing)
+#         else:
+#             loss_i2t = F.cross_entropy(sim_matrix, labels)
+#             loss_t2i = F.cross_entropy(sim_matrix.T, labels)
+        
+#         hard_loss = (loss_i2t + loss_t2i) / 2
+        
+#         # 2. 软标签损失
+#         soft_loss = self._compute_soft_label_loss(sim_matrix, image_features, text_features)
+        
+#         # 3. 简单的hard negative损失
+#         hard_neg_loss = self._compute_simple_hard_negative_loss(sim_matrix, labels)
+        
+#         # 4. 组合损失：软标签 + 硬标签 + hard negative
+#         total_loss = (self.soft_label_weight * soft_loss + 
+#                      (1 - self.soft_label_weight) * hard_loss + 
+#                      0.1 * hard_neg_loss)
+        
+#         return total_loss
+    
+#     def _compute_soft_label_loss(self, sim_matrix: torch.Tensor, 
+#                                 image_features: torch.Tensor, 
+#                                 text_features: torch.Tensor) -> torch.Tensor:
+#         """计算软标签损失（参考CLIP_breast的实现）"""
+#         # 统一到FP32，提高数值稳定性
+#         img = image_features.float()
+#         txt = text_features.float()
+        
+#         # 教师分布：基于模态内相似度构造软标签
+#         with torch.no_grad():
+#             image_sim = torch.matmul(img, img.T)                    # [B, B]
+#             text_sim = torch.matmul(txt, txt.T)                     # [B, B]
+#             # 组合软标签，应用温度控制
+#             targets = F.softmax((image_sim + text_sim) / 2.0 * self.soft_label_temp, dim=-1)
+        
+#         # 学生预测：跨模态相似度
+#         logits_i2t = sim_matrix * self.temperature  # 恢复原始logits
+#         logits_t2i = sim_matrix.T * self.temperature
+        
+#         # 软标签交叉熵
+#         loss_i = self._soft_cross_entropy(logits_i2t, targets)
+#         loss_t = self._soft_cross_entropy(logits_t2i, targets.T)
+        
+#         return (loss_i + loss_t) / 2
+    
+#     def _soft_cross_entropy(self, predicted_logits: torch.Tensor, 
+#                            target_prob: torch.Tensor, 
+#                            reduction: str = 'mean') -> torch.Tensor:
+#         """软标签交叉熵实现（参考CLIP_breast）"""
+#         # 统一到FP32，提高数值稳定性
+#         predicted_logits = predicted_logits.float()
+#         target_prob = target_prob.float()
+        
+#         # log_softmax本身是数值稳定实现
+#         log_prob = F.log_softmax(predicted_logits, dim=-1)      # [B, B]
+#         loss = -(target_prob * log_prob).sum(dim=-1)            # [B]
+        
+#         if reduction == 'mean':
+#             return loss.mean()
+#         elif reduction == 'sum':
+#             return loss.sum()
+#         else:
+#             return loss
+    
+#     def _compute_hard_label_loss(self, sim_matrix: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+#         """计算硬标签损失（原来的实现）"""
+#         # 1. 基础CLIP损失（带标签平滑）
+#         if self.label_smoothing > 0:
+#             loss_i2t = F.cross_entropy(sim_matrix, labels, label_smoothing=self.label_smoothing)
+#             loss_t2i = F.cross_entropy(sim_matrix.T, labels, label_smoothing=self.label_smoothing)
+#         else:
+#             loss_i2t = F.cross_entropy(sim_matrix, labels)
+#             loss_t2i = F.cross_entropy(sim_matrix.T, labels)
+        
+#         clip_loss = (loss_i2t + loss_t2i) / 2
+        
+#         # 2. 简单的hard negative损失
+#         hard_neg_loss = self._compute_simple_hard_negative_loss(sim_matrix, labels)
+        
+#         # 3. 组合损失（简单加权）
+#         total_loss = 0.8 * clip_loss + 0.2 * hard_neg_loss
+        
+#         return total_loss
+    
+#     def _compute_simple_hard_negative_loss(self, sim_matrix: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+#         """计算简单的hard negative损失"""
+#         batch_size = sim_matrix.size(0)
+        
+#         # 获取正样本相似度
+#         pos_sim = sim_matrix[torch.arange(batch_size), labels]
+        
+#         loss = 0.0
+#         for i in range(batch_size):
+#             # 获取负样本相似度（排除正样本）
+#             neg_mask = torch.ones(batch_size, dtype=torch.bool, device=sim_matrix.device)
+#             neg_mask[i] = False
+#             neg_sims = sim_matrix[i][neg_mask]
+            
+#             # 选择最难的几个负样本
+#             num_hard = max(1, int(self.hard_negative_ratio * (batch_size - 1)))
+#             hard_negs, _ = torch.topk(neg_sims, num_hard)
+            
+#             # 计算margin loss
+#             for hard_neg in hard_negs:
+#                 margin_loss = F.relu(hard_neg - pos_sim[i] + self.margin)
+#                 loss += margin_loss
+        
+#         return loss / batch_size
 class UltrasoundSimpleLoss(nn.Module):
     """
     超声图像简单高效损失函数
@@ -816,19 +987,33 @@ class UltrasoundSimpleLoss(nn.Module):
     
     def __init__(self, temperature: float = 0.1, 
                  label_smoothing: float = 0.1,
-                 hard_negative_ratio: float = 0.3,
-                 margin: float = 0.2,
+                 hard_negative_ratio: float = 0.5,
+                 margin: float = 0.3,
                  use_soft_label: bool = True,
                  soft_label_temp: float = 2.0,
-                 soft_label_weight: float = 0.6):
+                 soft_label_weight: float = 0.35,
+                 hard_neg_weight: float = 0.35,
+                 learnable_temperature: bool = True,
+                 min_temperature: float = 0.02,
+                 max_temperature: float = 0.5):
         super().__init__()
-        self.temperature = temperature
+        self._base_temperature = float(temperature)
         self.label_smoothing = label_smoothing
         self.hard_negative_ratio = hard_negative_ratio
         self.margin = margin
         self.use_soft_label = use_soft_label
         self.soft_label_temp = soft_label_temp
         self.soft_label_weight = soft_label_weight
+        self.hard_neg_weight = hard_neg_weight
+        self.learnable_temperature = learnable_temperature
+        self.min_temperature = min_temperature
+        self.max_temperature = max_temperature
+        if learnable_temperature:
+            init_temp = torch.tensor(float(temperature), dtype=torch.float32)
+            self.log_temperature = nn.Parameter(init_temp.log())
+        else:
+            self.register_buffer('fixed_temperature', torch.tensor(float(temperature), dtype=torch.float32))
+            self.log_temperature = None
         
     def forward(self, image_features: torch.Tensor, text_features: torch.Tensor) -> torch.Tensor:
         """
@@ -846,8 +1031,11 @@ class UltrasoundSimpleLoss(nn.Module):
         image_features = F.normalize(image_features, p=2, dim=-1)
         text_features = F.normalize(text_features, p=2, dim=-1)
         
+        # 获取当前温度
+        temperature = self._current_temperature(device=image_features.device, dtype=image_features.dtype)
+
         # 计算相似度矩阵
-        sim_matrix = torch.matmul(image_features, text_features.T) / self.temperature
+        sim_matrix = torch.matmul(image_features, text_features.T) / temperature
         
         # 创建硬标签
         labels = torch.arange(batch_size, device=device, dtype=torch.long)
@@ -861,6 +1049,17 @@ class UltrasoundSimpleLoss(nn.Module):
         
         return total_loss
     
+    def _current_temperature(self, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+        if self.learnable_temperature and self.log_temperature is not None:
+            # 确保log_temperature不会过大或过小
+            clamped_log_temp = torch.clamp(self.log_temperature, min=-5.0, max=2.0)
+            temp = clamped_log_temp.exp().clamp(self.min_temperature, self.max_temperature)
+            return temp.to(device=device, dtype=dtype)
+        temp = getattr(self, 'fixed_temperature', None)
+        if temp is None:
+            temp = torch.tensor(self._base_temperature, device=device, dtype=dtype)
+        return temp.to(device=device, dtype=dtype).clamp(self.min_temperature, self.max_temperature)
+
     def _compute_soft_hard_combined_loss(self, sim_matrix: torch.Tensor, labels: torch.Tensor, 
                                        image_features: torch.Tensor, text_features: torch.Tensor) -> torch.Tensor:
         """计算软硬标签结合的损失"""
@@ -882,49 +1081,96 @@ class UltrasoundSimpleLoss(nn.Module):
         # 3. 简单的hard negative损失
         hard_neg_loss = self._compute_simple_hard_negative_loss(sim_matrix, labels)
         
-        # 4. 组合损失：软标签 + 硬标签 + hard negative
+        # 4. 检查各项损失的有效性
+        soft_loss = torch.where(torch.isfinite(soft_loss), soft_loss, torch.tensor(0.0, device=soft_loss.device))
+        hard_loss = torch.where(torch.isfinite(hard_loss), hard_loss, torch.tensor(0.0, device=hard_loss.device))
+        hard_neg_loss = torch.where(torch.isfinite(hard_neg_loss), hard_neg_loss, torch.tensor(0.0, device=hard_neg_loss.device))
+        
+        # 5. 组合损失：软标签 + 硬标签 + hard negative
         total_loss = (self.soft_label_weight * soft_loss + 
                      (1 - self.soft_label_weight) * hard_loss + 
-                     0.1 * hard_neg_loss)
+                     self.hard_neg_weight * hard_neg_loss)
+        
+        # 6. 最终检查
+        if not torch.isfinite(total_loss):
+            print(f"WARNING: Total loss is not finite, falling back to hard loss only")
+            return hard_loss
         
         return total_loss
     
     def _compute_soft_label_loss(self, sim_matrix: torch.Tensor, 
                                 image_features: torch.Tensor, 
                                 text_features: torch.Tensor) -> torch.Tensor:
-        """计算软标签损失（参考CLIP_breast的实现）"""
+        """计算数值稳定的软标签损失"""
         # 统一到FP32，提高数值稳定性
         img = image_features.float()
         txt = text_features.float()
         
-        # 教师分布：基于模态内相似度构造软标签
+        # 教师分布：基于模态内相似度构造软标签，但更加保守
         with torch.no_grad():
-            image_sim = torch.matmul(img, img.T)                    # [B, B]
-            text_sim = torch.matmul(txt, txt.T)                     # [B, B]
-            # 组合软标签，应用温度控制
-            targets = F.softmax((image_sim + text_sim) / 2.0 * self.soft_label_temp, dim=-1)
+            # 计算自相似度，clamp避免极值
+            image_sim = torch.clamp(torch.matmul(img, img.T), min=-10.0, max=10.0)
+            text_sim = torch.clamp(torch.matmul(txt, txt.T), min=-10.0, max=10.0)
+            
+            # 降低非对角线相似度的影响，强化对角线（硬标签）
+            batch_size = image_sim.size(0)
+            identity_boost = torch.eye(batch_size, device=image_sim.device) * 1.0  # 增强对角线
+            
+            combined_sim = (image_sim + text_sim) / 2.0 + identity_boost
+            
+            # 使用更高的温度让分布更平滑，降低过拟合风险
+            temperature_scale = max(self.soft_label_temp, 1e-6)
+            
+            # 数值稳定的softmax
+            combined_sim_scaled = combined_sim / temperature_scale
+            combined_sim_stable = combined_sim_scaled - combined_sim_scaled.max(dim=-1, keepdim=True)[0]
+            targets = F.softmax(combined_sim_stable, dim=-1)
+            
+            # 进一步强化对角线（硬标签方向）
+            hard_labels = torch.eye(batch_size, device=targets.device)
+            targets = 0.7 * targets + 0.3 * hard_labels  # 更强的硬标签混合
+            
+            # 确保数值稳定
+            targets = targets.clamp_min(1e-8)
+            targets = targets / (targets.sum(dim=-1, keepdim=True) + 1e-8)
         
-        # 学生预测：跨模态相似度
-        logits_i2t = sim_matrix * self.temperature  # 恢复原始logits
-        logits_t2i = sim_matrix.T * self.temperature
+        # 学生预测：跨模态相似度（clamp以确保稳定）
+        logits_i2t = torch.clamp(sim_matrix, min=-10.0, max=10.0)
+        logits_t2i = torch.clamp(sim_matrix.T, min=-10.0, max=10.0)
         
-        # 软标签交叉熵
+        # 软标签交叉熵 - 使用更稳定的实现
         loss_i = self._soft_cross_entropy(logits_i2t, targets)
         loss_t = self._soft_cross_entropy(logits_t2i, targets.T)
+        
+        # 检查损失有效性
+        loss_i = torch.where(torch.isfinite(loss_i), loss_i, torch.tensor(0.0, device=loss_i.device))
+        loss_t = torch.where(torch.isfinite(loss_t), loss_t, torch.tensor(0.0, device=loss_t.device))
         
         return (loss_i + loss_t) / 2
     
     def _soft_cross_entropy(self, predicted_logits: torch.Tensor, 
                            target_prob: torch.Tensor, 
                            reduction: str = 'mean') -> torch.Tensor:
-        """软标签交叉熵实现（参考CLIP_breast）"""
+        """数值稳定的软标签交叉熵实现"""
         # 统一到FP32，提高数值稳定性
         predicted_logits = predicted_logits.float()
         target_prob = target_prob.float()
         
+        # 确保输入数值稳定
+        predicted_logits = torch.clamp(predicted_logits, min=-10.0, max=10.0)
+        target_prob = torch.clamp(target_prob, min=1e-8, max=1.0)
+        
+        # 重新归一化target_prob以确保sum=1
+        target_prob = target_prob / (target_prob.sum(dim=-1, keepdim=True) + 1e-8)
+        
         # log_softmax本身是数值稳定实现
         log_prob = F.log_softmax(predicted_logits, dim=-1)      # [B, B]
+        
+        # 计算交叉熵，添加小的数值稳定项
         loss = -(target_prob * log_prob).sum(dim=-1)            # [B]
+        
+        # 检查损失有效性
+        loss = torch.where(torch.isfinite(loss), loss, torch.zeros_like(loss))
         
         if reduction == 'mean':
             return loss.mean()
@@ -954,30 +1200,62 @@ class UltrasoundSimpleLoss(nn.Module):
         return total_loss
     
     def _compute_simple_hard_negative_loss(self, sim_matrix: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        """计算简单的hard negative损失"""
+        """计算数值稳定的hard negative损失"""
         batch_size = sim_matrix.size(0)
+        device = sim_matrix.device
+        
+        # 数值稳定性：clamp相似度值
+        sim_matrix_clamped = torch.clamp(sim_matrix, min=-10.0, max=10.0)
         
         # 获取正样本相似度
-        pos_sim = sim_matrix[torch.arange(batch_size), labels]
+        pos_sim = sim_matrix_clamped[torch.arange(batch_size), labels]
         
-        loss = 0.0
-        for i in range(batch_size):
-            # 获取负样本相似度（排除正样本）
-            neg_mask = torch.ones(batch_size, dtype=torch.bool, device=sim_matrix.device)
-            neg_mask[i] = False
-            neg_sims = sim_matrix[i][neg_mask]
-            
-            # 选择最难的几个负样本
-            num_hard = max(1, int(self.hard_negative_ratio * (batch_size - 1)))
-            hard_negs, _ = torch.topk(neg_sims, num_hard)
-            
-            # 计算margin loss
-            for hard_neg in hard_negs:
-                margin_loss = F.relu(hard_neg - pos_sim[i] + self.margin)
-                loss += margin_loss
+        # 创建负样本mask
+        neg_mask = ~torch.eye(batch_size, dtype=torch.bool, device=device)
         
-        return loss / batch_size
-
+        # 获取所有负样本相似度
+        neg_sims = sim_matrix_clamped[neg_mask].view(batch_size, batch_size - 1)
+        
+        # 选择最难的负样本（相似度最高的）
+        num_hard = max(1, int(self.hard_negative_ratio * (batch_size - 1)))
+        hard_negs, _ = torch.topk(neg_sims, num_hard, dim=1)
+        
+        # 使用当前温度而不是固定值，确保数值稳定
+        current_temp = self._current_temperature(device, sim_matrix.dtype)
+        # 确保温度不会太小
+        safe_temp = torch.clamp(current_temp, min=0.05, max=1.0)
+        
+        # 数值稳定的InfoNCE损失
+        pos_logits = pos_sim / safe_temp
+        neg_logits = hard_negs / safe_temp
+        
+        # 计算log-sum-exp，数值稳定版本
+        max_logits = torch.max(pos_logits.unsqueeze(1), neg_logits).max(dim=1, keepdim=True)[0]
+        pos_exp_stable = torch.exp(pos_logits.unsqueeze(1) - max_logits)
+        neg_exp_stable = torch.exp(neg_logits - max_logits)
+        
+        # InfoNCE损失（数值稳定版本）
+        infonce_loss = -torch.log(pos_exp_stable / (pos_exp_stable + neg_exp_stable.sum(dim=1, keepdim=True) + 1e-8)).squeeze()
+        
+        # 传统margin loss（更保守）
+        pos_expanded = pos_sim.unsqueeze(1).expand(-1, num_hard)
+        margin_loss = F.relu(hard_negs - pos_expanded + self.margin).mean(dim=1)
+        
+        # 检查损失的有效性
+        infonce_loss = torch.where(torch.isfinite(infonce_loss), infonce_loss, torch.zeros_like(infonce_loss))
+        margin_loss = torch.where(torch.isfinite(margin_loss), margin_loss, torch.zeros_like(margin_loss))
+        
+        # 组合两种损失，降低InfoNCE权重以提高稳定性
+        total_loss = 0.3 * infonce_loss + 0.7 * margin_loss
+        
+        # 最终检查
+        final_loss = total_loss.mean()
+        if not torch.isfinite(final_loss):
+            # 如果仍然有问题，返回简单的margin loss
+            simple_margin = F.relu(hard_negs.mean(dim=1) - pos_sim + self.margin)
+            return simple_margin.mean()
+        
+        return final_loss
 
 class SimplifiedClipStableLoss(nn.Module):
     """
@@ -1004,60 +1282,170 @@ class SimplifiedClipStableLoss(nn.Module):
         
     def forward(self, image_features: torch.Tensor, text_features: torch.Tensor) -> torch.Tensor:
         """
-        计算简化稳定的CLIP损失
+        计算简化稳定的CLIP损失 - 超级稳定版
         """
         batch_size = image_features.size(0)
         device = image_features.device
         
+        # 输入验证
+        if batch_size == 0:
+            return torch.tensor(0.0, device=device, requires_grad=True)
+        
+        # 检查输入特征是否有效
+        if torch.isnan(image_features).any() or torch.isinf(image_features).any():
+            print("WARNING: Image features contain NaN/Inf, using fallback")
+            return self._compute_emergency_fallback_loss(batch_size, device)
+        
+        if torch.isnan(text_features).any() or torch.isinf(text_features).any():
+            print("WARNING: Text features contain NaN/Inf, using fallback")
+            return self._compute_emergency_fallback_loss(batch_size, device)
+        
         # 安全归一化和裁剪
-        image_features = self._safe_normalize_and_clamp(image_features)
-        text_features = self._safe_normalize_and_clamp(text_features)
-        
-        # 计算相似度矩阵
-        similarity_matrix = torch.matmul(image_features, text_features.T) / self.temperature
-        
-        # 裁剪相似度防止数值溢出
-        similarity_matrix = torch.clamp(similarity_matrix, 
-                                      min=self.similarity_clamp_range[0],
-                                      max=self.similarity_clamp_range[1])
-        
-        # 创建标签
-        labels = torch.arange(batch_size, device=device, dtype=torch.long)
-        
-        # 计算损失
-        if self.label_smoothing > 0:
-            loss_i2t = F.cross_entropy(similarity_matrix, labels, 
-                                     label_smoothing=self.label_smoothing)
-            loss_t2i = F.cross_entropy(similarity_matrix.T, labels, 
-                                     label_smoothing=self.label_smoothing)
-        else:
-            loss_i2t = F.cross_entropy(similarity_matrix, labels)
-            loss_t2i = F.cross_entropy(similarity_matrix.T, labels)
-        
-        total_loss = (loss_i2t + loss_t2i) / 2
-        
-        # 损失值裁剪（如果启用）
-        if self.gradient_clip_loss:
-            total_loss = torch.clamp(total_loss, min=0.0, max=10.0)
-        
-        # 检查损失有效性
-        if not torch.isfinite(total_loss):
-            print("WARNING: SimplifiedClipStableLoss computed non-finite loss, using fallback")
-            return torch.tensor(1.0, device=device, requires_grad=True)
-        
-        return total_loss
+        try:
+            image_features = self._ultra_safe_normalize(image_features)
+            text_features = self._ultra_safe_normalize(text_features)
+            
+            # 再次检查归一化后的特征
+            if torch.isnan(image_features).any() or torch.isinf(image_features).any():
+                print("WARNING: Image features NaN/Inf after normalization, using fallback")
+                return self._compute_emergency_fallback_loss(batch_size, device)
+            
+            if torch.isnan(text_features).any() or torch.isinf(text_features).any():
+                print("WARNING: Text features NaN/Inf after normalization, using fallback")
+                return self._compute_emergency_fallback_loss(batch_size, device)
+            
+            # 计算相似度矩阵，使用合理的温度范围
+            safe_temp = max(self.temperature, 0.01)  # 降低最小温度限制，允许更强的对比
+            similarity_matrix = torch.matmul(image_features, text_features.T) / safe_temp
+            
+            # 使用配置的相似度裁剪范围，不再进一步限制
+            similarity_matrix = torch.clamp(similarity_matrix, 
+                                          min=self.similarity_clamp_range[0], 
+                                          max=self.similarity_clamp_range[1])
+            
+            # 检查相似度矩阵
+            if torch.isnan(similarity_matrix).any() or torch.isinf(similarity_matrix).any():
+                print("WARNING: Similarity matrix contains NaN/Inf, using fallback")
+                return self._compute_emergency_fallback_loss(batch_size, device)
+            
+            # 创建标签
+            labels = torch.arange(batch_size, device=device, dtype=torch.long)
+            
+            # 计算损失，增加多重异常处理
+            try:
+                # 使用更保守的标签平滑
+                smoothing = min(self.label_smoothing, 0.1)
+                
+                if smoothing > 0:
+                    loss_i2t = F.cross_entropy(similarity_matrix, labels, 
+                                             label_smoothing=smoothing, reduction='mean')
+                    loss_t2i = F.cross_entropy(similarity_matrix.T, labels, 
+                                             label_smoothing=smoothing, reduction='mean')
+                else:
+                    loss_i2t = F.cross_entropy(similarity_matrix, labels, reduction='mean')
+                    loss_t2i = F.cross_entropy(similarity_matrix.T, labels, reduction='mean')
+                
+                # 检查单个损失项
+                if not torch.isfinite(loss_i2t):
+                    print(f"WARNING: loss_i2t non-finite: {loss_i2t}, using fallback")
+                    return self._compute_emergency_fallback_loss(batch_size, device)
+                    
+                if not torch.isfinite(loss_t2i):
+                    print(f"WARNING: loss_t2i non-finite: {loss_t2i}, using fallback")
+                    return self._compute_emergency_fallback_loss(batch_size, device)
+                
+                total_loss = (loss_i2t + loss_t2i) / 2
+                
+                # 合理的损失值裁剪 - 避免过度限制学习
+                total_loss = torch.clamp(total_loss, min=1e-6, max=20.0)
+                
+                # 最终检查损失有效性
+                if not torch.isfinite(total_loss):
+                    print(f"WARNING: total_loss non-finite: {total_loss}, using fallback")
+                    return self._compute_emergency_fallback_loss(batch_size, device)
+                
+                return total_loss
+                
+            except Exception as e:
+                print(f"WARNING: Exception in loss computation: {e}, using fallback")
+                return self._compute_emergency_fallback_loss(batch_size, device)
+                
+        except Exception as e:
+            print(f"WARNING: Exception in feature processing: {e}, using fallback")
+            return self._compute_emergency_fallback_loss(batch_size, device)
     
-    def _safe_normalize_and_clamp(self, features: torch.Tensor) -> torch.Tensor:
-        """安全的归一化和裁剪"""
-        # 先裁剪极端值
-        features = torch.clamp(features, 
-                             min=self.feature_clamp_range[0],
-                             max=self.feature_clamp_range[1])
+    def _ultra_safe_normalize(self, features: torch.Tensor) -> torch.Tensor:
+        """平衡的安全归一化函数 - 修复过度保守问题"""
+        # 检查输入
+        if features.numel() == 0:
+            return features
+            
+        # 更合理的特征裁剪范围（与配置中的feature_clamp_range一致）
+        clamp_min = max(self.feature_clamp_range[0], -5.0)
+        clamp_max = min(self.feature_clamp_range[1], 5.0)
+        features = torch.clamp(features, min=clamp_min, max=clamp_max)
+        
+        # 检查是否有异常值
+        if torch.isnan(features).any() or torch.isinf(features).any():
+            print("WARNING: 发现NaN/Inf特征，使用默认单位向量")
+            # 如果有异常值，创建单位向量
+            features = torch.zeros_like(features)
+            features[:, 0] = 1.0
+            return features
         
         # 安全L2归一化
         norm = torch.norm(features, p=2, dim=-1, keepdim=True)
-        norm = torch.clamp(norm, min=self.safe_normalize_eps)
+        
+        # 更合理的epsilon值
+        safe_eps = max(self.safe_normalize_eps, 1e-8)
+        norm = torch.clamp(norm, min=safe_eps)
+        
+        # 归一化
         features = features / norm
+        
+        # 归一化后不需要再次裁剪，因为已经是单位向量
+        # 只在确实有问题时才裁剪
+        if torch.any(torch.abs(features) > 1.1):  # 允许一定的数值误差
+            features = torch.clamp(features, min=-1.0, max=1.0)
+        
+        return features
+    
+    def _compute_emergency_fallback_loss(self, batch_size: int, device: torch.device) -> torch.Tensor:
+        """紧急回退损失函数"""
+        # 返回一个基于batch_size的合理损失值
+        base_loss = math.log(batch_size) if batch_size > 1 else 1.0
+        return torch.tensor(base_loss, device=device, requires_grad=True, dtype=torch.float32)
+    
+    def _safe_normalize_and_clamp(self, features: torch.Tensor) -> torch.Tensor:
+        """安全的归一化和裁剪 - 增强版"""
+        # 检查输入
+        if features.numel() == 0:
+            return features
+            
+        # 更保守的特征裁剪范围
+        safe_min = max(self.feature_clamp_range[0], -5.0)
+        safe_max = min(self.feature_clamp_range[1], 5.0)
+        features = torch.clamp(features, min=safe_min, max=safe_max)
+        
+        # 检查是否有异常值
+        if torch.isnan(features).any() or torch.isinf(features).any():
+            # 如果有异常值，用零向量替代
+            features = torch.zeros_like(features)
+            # 给一个很小的值避免零向量
+            features[:, 0] = 1e-6
+        
+        # 安全L2归一化
+        norm = torch.norm(features, p=2, dim=-1, keepdim=True)
+        
+        # 更大的epsilon值保证数值稳定性
+        safe_eps = max(self.safe_normalize_eps, 1e-6)
+        norm = torch.clamp(norm, min=safe_eps)
+        
+        # 避免除法产生极值
+        features = features / norm
+        
+        # 最后一次裁剪确保结果在合理范围内
+        features = torch.clamp(features, min=-1.0, max=1.0)
         
         return features
 
@@ -1347,6 +1735,176 @@ class UltrasoundAdvancedLoss(nn.Module):
         return (loss_i2t + loss_t2i) / 2
 
 
+class MaskSupervisionLoss(nn.Module):
+    """
+    Mask监督损失 - 用于超声图像的attention监督
+    结合BCE和Dice损失，引导模型关注病变区域
+    """
+    
+    def __init__(self, 
+                 bce_weight: float = 0.5,
+                 dice_weight: float = 0.5,
+                 smooth: float = 1e-5,
+                 pos_weight: float = 2.0):
+        """
+        Args:
+            bce_weight: BCE损失权重
+            dice_weight: Dice损失权重  
+            smooth: Dice损失平滑项
+            pos_weight: BCE中正样本的权重(处理不平衡)
+        """
+        super().__init__()
+        self.bce_weight = bce_weight
+        self.dice_weight = dice_weight
+        self.smooth = smooth
+        self.pos_weight = torch.tensor([pos_weight])
+        
+    def forward(self, pred_mask: torch.Tensor, gt_mask: torch.Tensor) -> torch.Tensor:
+        """
+        计算mask监督损失
+        Args:
+            pred_mask: 预测的attention map [B, 1, H, W]
+            gt_mask: 真实的mask [B, 1, H, W]
+        Returns:
+            总损失
+        """
+        # 确保维度匹配
+        if pred_mask.shape != gt_mask.shape:
+            gt_mask = F.interpolate(gt_mask, size=pred_mask.shape[-2:], mode='nearest')
+        
+        # 将pos_weight移到正确的设备
+        if self.pos_weight.device != pred_mask.device:
+            self.pos_weight = self.pos_weight.to(pred_mask.device)
+        
+        # BCE损失
+        bce_loss = F.binary_cross_entropy_with_logits(
+            pred_mask, gt_mask, 
+            pos_weight=self.pos_weight,
+            reduction='mean'
+        )
+        
+        # Dice损失
+        pred_sigmoid = torch.sigmoid(pred_mask)
+        pred_flat = pred_sigmoid.view(-1)
+        gt_flat = gt_mask.view(-1)
+        
+        intersection = (pred_flat * gt_flat).sum()
+        dice = (2. * intersection + self.smooth) / (pred_flat.sum() + gt_flat.sum() + self.smooth)
+        dice_loss = 1 - dice
+        
+        # 组合损失
+        total_loss = self.bce_weight * bce_loss + self.dice_weight * dice_loss
+        
+        return total_loss
+
+
+class AttentionEntropyLoss(nn.Module):
+    """
+    注意力熵正则化损失 - 鼓励attention map集中而不分散
+    """
+    
+    def __init__(self, 
+                 entropy_weight: float = 0.01,
+                 sparsity_weight: float = 0.01,
+                 target_sparsity: float = 0.3):
+        """
+        Args:
+            entropy_weight: 熵损失权重
+            sparsity_weight: 稀疏性损失权重
+            target_sparsity: 目标稀疏度(激活比例)
+        """
+        super().__init__()
+        self.entropy_weight = entropy_weight
+        self.sparsity_weight = sparsity_weight
+        self.target_sparsity = target_sparsity
+        
+    def forward(self, attention_map: torch.Tensor) -> torch.Tensor:
+        """
+        计算注意力正则化损失
+        Args:
+            attention_map: attention weights [B, 1, H, W]
+        Returns:
+            正则化损失
+        """
+        # 归一化到概率分布
+        B, _, H, W = attention_map.shape
+        attention_flat = attention_map.view(B, -1)  # [B, H*W]
+        attention_prob = F.softmax(attention_flat, dim=1)
+        
+        # 计算熵 (越低越集中)
+        entropy = -(attention_prob * torch.log(attention_prob + 1e-8)).sum(dim=1).mean()
+        
+        # 计算稀疏度 (激活的像素比例)
+        threshold = 0.1  # 激活阈值
+        active_ratio = (attention_map > threshold).float().mean()
+        sparsity_loss = (active_ratio - self.target_sparsity).abs()
+        
+        # 组合损失
+        total_loss = self.entropy_weight * entropy + self.sparsity_weight * sparsity_loss
+        
+        return total_loss
+
+
+class AttentionInsideOutsideLoss(nn.Module):
+    """
+    Attention Inside/Outside对比损失
+    鼓励attention在mask内部高，在mask外部低
+    """
+    
+    def __init__(self, margin: float = 0.3, temperature: float = 0.1):
+        """
+        Args:
+            margin: inside和outside attention的最小差距
+            temperature: 对比损失的温度参数
+        """
+        super().__init__()
+        self.margin = margin
+        self.temperature = temperature
+        
+    def forward(self, attention_map: torch.Tensor, gt_mask: torch.Tensor) -> torch.Tensor:
+        """
+        计算inside/outside对比损失
+        Args:
+            attention_map: predicted attention [B, 1, H, W]
+            gt_mask: ground truth mask [B, 1, H, W]
+        Returns:
+            对比损失
+        """
+        # 确保维度匹配
+        if attention_map.shape != gt_mask.shape:
+            gt_mask = F.interpolate(gt_mask, size=attention_map.shape[-2:], mode='nearest')
+        
+        # 分离inside和outside区域
+        mask_bool = gt_mask > 0.5
+        inside_attention = attention_map[mask_bool]
+        outside_attention = attention_map[~mask_bool]
+        
+        # 确保有足够的样本
+        if inside_attention.numel() == 0 or outside_attention.numel() == 0:
+            return torch.tensor(0.0, device=attention_map.device)
+        
+        # 计算平均attention
+        inside_mean = inside_attention.mean()
+        outside_mean = outside_attention.mean()
+        
+        # Margin loss: 希望inside_mean - outside_mean > margin
+        loss = F.relu(self.margin - (inside_mean - outside_mean))
+        
+        # 可选：添加分布差异损失(KL散度)
+        inside_dist = F.softmax(inside_attention / self.temperature, dim=0)
+        outside_dist = F.softmax(-outside_attention / self.temperature, dim=0)
+        
+        # 简化的分布差异度量
+        dist_loss = -torch.log(1 - F.cosine_similarity(
+            inside_dist.unsqueeze(0), 
+            outside_dist.unsqueeze(0)
+        ) + 1e-8)
+        
+        total_loss = loss + 0.1 * dist_loss
+        
+        return total_loss
+
+
 class LossFactory:
     """损失函数工厂类"""
     
@@ -1384,5 +1942,11 @@ class LossFactory:
             return SimplifiedClipStableLoss(**kwargs)
         elif loss_type == 'ultrasound_advanced':
             return UltrasoundAdvancedLoss(**kwargs)
+        elif loss_type == 'mask_supervision':
+            return MaskSupervisionLoss(**kwargs)
+        elif loss_type == 'attention_entropy':
+            return AttentionEntropyLoss(**kwargs)
+        elif loss_type == 'attention_inside_outside':
+            return AttentionInsideOutsideLoss(**kwargs)
         else:
             raise ValueError(f"不支持的损失函数类型: {loss_type}")

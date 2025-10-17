@@ -107,6 +107,13 @@ class Evaluator:
         # 计算检索指标
         metrics = self._compute_retrieval_metrics(image_features, text_features, verbose)
         
+        # 7. 如果模型支持attention map，评估attention相关指标
+        if hasattr(self.model, 'core') and hasattr(self.model.core, 'experiment_config'):
+            if self.model.core.experiment_config.get('use_attention_head', False):
+                attention_metrics = self._evaluate_attention_metrics(dataloader, verbose)
+                if attention_metrics:
+                    metrics.update(attention_metrics)
+        
         return metrics
     
     def _compute_retrieval_metrics(self, 
@@ -169,6 +176,8 @@ class Evaluator:
         metrics['t2i_mean_rank'] = np.mean(t2i_ranks)
         metrics['i2t_median_rank'] = np.median(i2t_ranks)
         metrics['t2i_median_rank'] = np.median(t2i_ranks)
+        
+        # 注意：attention指标需要在evaluate方法中单独计算，因为需要dataloader
         
         if verbose:
             print(f"I2T平均排名: {metrics['i2t_mean_rank']:.2f}, 中位数排名: {metrics['i2t_median_rank']:.2f}")
@@ -652,6 +661,108 @@ class Evaluator:
                 print(f"    T2I中位数排名: {metrics['t2i_median_rank']:.2f}")
         
         print("="*60)
+    
+    def _evaluate_attention_metrics(self, dataloader: DataLoader, verbose: bool = True) -> Dict[str, float]:
+        """评估attention相关指标"""
+        if verbose:
+            print("评估attention指标...")
+        
+        attention_metrics = {
+            'attention_coverage': [],  # attention覆盖mask的比例
+            'attention_inside_ratio': [],  # attention在mask内的比例
+            'attention_sparsity': [],  # attention的稀疏度
+            'attention_entropy': [],  # attention的熵
+        }
+        
+        total_samples = 0
+        
+        with torch.no_grad():
+            for batch in tqdm(dataloader, desc="Attention evaluation", disable=not verbose):
+                images = batch['images'].to(self.device)
+                masks = batch.get('mask')  # 可能没有mask
+                
+                # 处理文本输入
+                if hasattr(self.model, 'config') and 'qwen' in str(type(self.model)).lower():
+                    if 'texts' in batch:
+                        text_inputs = batch['texts']
+                    elif 'text' in batch:
+                        text_data = batch['text']
+                        text_inputs = [text_data] if isinstance(text_data, str) else text_data
+                    else:
+                        continue
+                else:
+                    text_tokens = batch['text_tokens']
+                    if isinstance(text_tokens, dict):
+                        text_inputs = {k: v.to(self.device) for k, v in text_tokens.items()}
+                    else:
+                        text_inputs = text_tokens.to(self.device)
+                
+                # 前向传播获取attention map
+                self.model.eval()
+                result = self.model.core.forward(images, text_inputs, masks=masks)
+                
+                if 'attention_map' in result:
+                    attention_map = result['attention_map']  # [B, 1, H, W]
+                    
+                    # 计算attention指标
+                    B, _, H, W = attention_map.shape
+                    
+                    for i in range(B):
+                        att_map = attention_map[i, 0]  # [H, W]
+                        
+                        # 稀疏度：激活区域的比例
+                        threshold = 0.1
+                        active_ratio = (att_map > threshold).float().mean().item()
+                        attention_metrics['attention_sparsity'].append(active_ratio)
+                        
+                        # 熵：衡量分布的集中程度
+                        att_flat = att_map.flatten()
+                        att_prob = F.softmax(att_flat, dim=0)
+                        entropy = -(att_prob * torch.log(att_prob + 1e-8)).sum().item()
+                        attention_metrics['attention_entropy'].append(entropy)
+                        
+                        # 如果有mask，计算覆盖度和inside ratio
+                        if masks is not None and i < masks.shape[0]:
+                            mask = masks[i].to(self.device)
+                            if mask.shape[-2:] != (H, W):
+                                mask = F.interpolate(mask.unsqueeze(0), size=(H, W), mode='nearest').squeeze(0)
+                            mask = mask[0] > 0.5  # 二值化
+                            
+                            if mask.sum() > 0:
+                                # 覆盖度：attention和mask的IoU
+                                att_binary = att_map > threshold
+                                intersection = (att_binary & mask).float().sum()
+                                union = (att_binary | mask).float().sum()
+                                iou = (intersection / (union + 1e-8)).item()
+                                attention_metrics['attention_coverage'].append(iou)
+                                
+                                # Inside ratio：attention权重在mask内的比例
+                                inside_weight = (att_map * mask).sum()
+                                total_weight = att_map.sum()
+                                inside_ratio = (inside_weight / (total_weight + 1e-8)).item()
+                                attention_metrics['attention_inside_ratio'].append(inside_ratio)
+                    
+                    total_samples += B
+        
+        # 计算平均值
+        metrics = {}
+        for key, values in attention_metrics.items():
+            if values:
+                metrics[f'avg_{key}'] = np.mean(values)
+                metrics[f'std_{key}'] = np.std(values)
+        
+        metrics['attention_evaluated_samples'] = total_samples
+        
+        if verbose:
+            print(f"评估了 {total_samples} 个样本的attention指标")
+            if 'avg_attention_coverage' in metrics:
+                print(f"  Attention覆盖度: {metrics['avg_attention_coverage']:.4f} ± {metrics['std_attention_coverage']:.4f}")
+            if 'avg_attention_inside_ratio' in metrics:
+                print(f"  Attention内部比例: {metrics['avg_attention_inside_ratio']:.4f} ± {metrics['std_attention_inside_ratio']:.4f}")
+            print(f"  Attention稀疏度: {metrics.get('avg_attention_sparsity', 0):.4f} ± {metrics.get('std_attention_sparsity', 0):.4f}")
+            print(f"  Attention熵: {metrics.get('avg_attention_entropy', 0):.4f} ± {metrics.get('std_attention_entropy', 0):.4f}")
+        
+        return metrics
     
     def print_finegrained_metrics(self, report: Dict):
         """打印细粒度评估结果"""

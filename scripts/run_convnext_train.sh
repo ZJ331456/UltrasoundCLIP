@@ -12,9 +12,9 @@ export OMP_NUM_THREADS=8
 export CUDA_CACHE_DISABLE=0
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 
-CONFIG_FILE="/media/ps/data-ssd/UltrasoundRAG/CLIP/config/convnext/convnext_config_2_combined_best_all_data.json"
-SAVE_DIR="/media/ps/data-ssd/UltrasoundRAG/CLIP/output/convnext_config_2_combined_best_all_data"
-LOG_FILE="/media/ps/data-ssd/UltrasoundRAG/CLIP/logs/training_convnext_config_2_combined_best_all_data.log"
+CONFIG_FILE="/media/ps/data-ssd/UltrasoundRAG/CLIP/config/convnext/convnext_config_2_combined_best_all_data_mask_balance_data_v1_fixed_difficult_data.json"
+SAVE_DIR="convnext/convnext_config_2_combined_best_all_data_mask_balance_data_v1_fixed_difficult_data"
+LOG_FILE="/media/ps/data-ssd/UltrasoundRAG/CLIP/logs/training_convnext/convnext_config_2_combined_best_all_data_mask_balance_data_v1_fixed_difficult_data.log"
 
 mkdir -p "$(dirname "$SAVE_DIR")"
 mkdir -p "$(dirname "$LOG_FILE")"

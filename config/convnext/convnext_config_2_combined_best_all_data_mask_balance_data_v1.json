@@ -1,0 +1,224 @@
+{
+  "model": {
+    "type": "convnext_clip",
+    "model_name": "convnext_roberta_clip",
+    "embed_dim": 768,
+    "vision_pooling": "auto",
+    "vision_encoder": {
+      "model_path": "/media/ps/data-ssd/UltrasoundRAG/CLIP/checkpoints/ConvNeXt/convnext-tiny-224",
+      "vision_dim": 768
+    },
+    "text_encoder": {
+      "model_name": "/media/ps/data-ssd/UltrasoundRAG/CLIP/checkpoints/RoBerta/roberta-base",
+      "max_length": 128
+    },
+    "device": "auto",
+    "description": "v3+multi-view：平衡版本 - 保留原版学习能力，优化数值稳定性",
+    "experiment_config": {
+      "use_attention_head": true,
+      "use_gating": true,
+      "use_multi_scale": true,
+      "use_sparse_attention": false,
+      "attention_sparsity_weight": 0.01,
+      "mask_min_area_ratio": 0.001,
+      "mask_soften_kernel": 5,
+      "gate_min": 0.15,
+      "gate_max": 0.85,
+      "local_global_alpha": 0.6,
+      "comment": "convnext_config_2_combined_best_all_data_mask_3在这个基础上方面进行了一下数据平衡！"
+    }
+  },
+  "training": {
+    "batch_size": 64,
+    "learning_rate": 3e-5,
+    "weight_decay": 0.015,
+    "max_epochs": 100,
+    "early_stopping_patience": 20,
+    "early_stopping_min_delta": 0.0001,
+    "gradient_clip_val": 1.0,
+    "warmup_steps": 1000,
+    "val_check_interval": 0.5,
+    "log_every_n_steps": 10,
+    "save_top_k": 3,
+    "monitor": "val_r1",
+    "mode": "max",
+    "use_optimized_lr_strategy": true,
+    "use_ema": true,
+    "ema_config": {
+      "enabled": true,
+      "decay": 0.9995,
+      "update_after_step": 200,
+      "use_ema_for_validation": true,
+      "use_ema_for_best_model": true,
+      "warmup_steps": 1500,
+      "decay_warmup": true
+    },
+    "optimizer": {
+      "type": "adamw_optimized",
+      "lr": 4e-5,
+      "weight_decay": 0.02,
+      "betas": [0.9, 0.95],
+      "eps": 1e-8,
+      "amsgrad": false,
+      "layerwise_lr_decay": true,
+      "layer_decay_rate": 0.95,
+      "exclude_bias_norm_from_decay": true
+    },
+    "scheduler": {
+      "type": "cosine_with_linear_warmup",
+      "warmup_steps": 1000,
+      "max_steps": 8000,
+      "eta_min": 1e-6,
+      "warmup_init_lr": 1e-6,
+      "restart_on_plateau": true,
+      "plateau_patience": 6,
+      "cooldown_factor": 0.5
+    },
+    "loss": {
+      "type": "simplified_clip_stable",
+      "use_optimized_loss": true,
+      "temperature": 0.07,
+      "label_smoothing": 0.1,
+      "numerical_stability": {
+        "feature_clamp_range": [-10.0, 10.0],
+        "similarity_clamp_range": [-50.0, 50.0],
+        "safe_normalize_eps": 1e-8,
+        "gradient_clip_loss": true
+      },
+      "fallback_config": {
+        "type": "clip",
+        "temperature": 0.07
+      },
+      "mask_supervision": {
+        "enabled": true,
+        "type": "mask_supervision",
+        "weight": 0.1,
+        "bce_weight": 0.5,
+        "dice_weight": 0.5,
+        "pos_weight": 2.0
+      },
+      "attention_regularization": {
+        "enabled": false,
+        "entropy_type": "attention_entropy",
+        "entropy_weight": 0.005,
+        "sparsity_weight": 0.005,
+        "target_sparsity": 0.3,
+        "inside_outside_type": "attention_inside_outside",
+        "inside_outside_weight": 0.02,
+        "margin": 0.3
+      }
+    },
+    "gradient_accumulation_steps": 4,
+    "mixed_precision": true,
+    "find_unused_parameters": false,
+    "lora": {
+      "enabled": false
+    },
+    "numerical_stability": {
+      "eps": 1e-6,
+      "feature_enhancement_scale": 1.01,
+      "gradient_clip_norm": 1.0,
+      "nan_inf_detection": true,
+      "safe_fallback": true
+    },
+    "multi_view": {
+      "weight_fused": 1.0,
+      "weight_global": 0.5,
+      "weight_local": 0.5
+    }
+  },
+  "data": {
+    "use_json_format": true,
+    "train_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/更新路径之后的json数据集/split_with_llm_enhance_refined/筛选图片3-只要有掩码分割的-做一个数据平衡/data_balance/merge/all_train.json",
+    "valid_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/更新路径之后的json数据集/split_with_llm_enhance_refined/筛选图片3-只要有掩码分割的-做一个数据平衡/data_balance/merge/all_val.json",
+    "test_json": "/media/ps/data-ssd/UltrasoundRAG/clip_caption/data-anatomy/更新路径之后的json数据集/split_with_llm_enhance_refined/筛选图片3-只要有掩码分割的-做一个数据平衡/data_balance/merge/all_test.json",
+    "image_root": "/media/ps/data/Datasets/ultrasound",
+    "image_size": 384,
+    "max_text_length": 128,
+    "tokenizer_type": "local_bert",
+    "image_normalization": "clip",
+    "use_optimized_augmentation": true,
+    "use_masks": true,
+    "ultrasound_optimization": {
+      "enabled": true,
+      "target_image_size": 384,
+      "preserve_aspect_ratio": true,
+      "fill_color": [128, 128, 128],
+      "augmentation": {
+        "enabled": true,
+        "use_medical_safe_augmentation": true,
+        "rotation_range": 1.5,
+        "brightness_range": 0.03,
+        "contrast_range": 0.03,
+        "gamma_correction": true,
+        "speckle_noise": false,
+        "preserve_medical_structures": true
+      },
+      "preprocessing": {
+        "force_rgb": true,
+        "normalize": true,
+        "mean": [0.485, 0.456, 0.406],
+        "std": [0.229, 0.224, 0.225],
+        "use_imagenet_normalization": true
+      }
+    },
+    "ultrasound_augmentation": {
+      "enabled": true,
+      "use_medical_optimized": true,
+      "contrast_enhancement": false,
+      "noise_reduction": false,
+      "edge_enhancement": false,
+      "gamma_correction": [0.97, 1.03],
+      "rotation_range": [-1.5, 1.5],
+      "brightness_range": [0.97, 1.03],
+      "contrast_range": [0.97, 1.03],
+      "elastic_deformation": false,
+      "cutout_probability": 0.0,
+      "mixup_alpha": 0.0,
+      "cutmix_alpha": 0.0,
+      "random_erasing": 0.0,
+      "gaussian_blur": 0.0,
+      "speckle_noise": 0.0,
+      "motion_blur": 0.0,
+      "safe_augmentation_policy": {
+        "no_horizontal_flip": true,
+        "preserve_anatomy": true,
+        "max_rotation_degrees": 1.5,
+        "color_jitter_strength": 0.03
+      }
+    },
+    "batch_size": 64,
+    "num_workers": 8,
+    "pin_memory": true,
+    "prefetch_factor": 2,
+    "balanced_sampling": {
+      "enabled": false,
+      "type": "balanced",
+      "num_classes_per_batch": 8,
+      "samples_per_class": 8,
+      "oversample_small_classes": true,
+      "max_oversample_ratio": 3.0,
+      "shuffle": true,
+      "drop_last": true,
+      "class_key": "class",
+      "text_key": "text"
+    }
+  },
+  "validation": {
+    "checkpoint_every_n_epochs": 1,
+    "validate_every_n_steps": 150,
+    "save_best_model": true,
+    "metric_for_best_model": "val_r1",
+    "greater_is_better": true
+  },
+  "logging": {
+    "log_level": "INFO",
+    "log_nan_inf_warnings": true,
+    "track_numerical_stability": true,
+    "save_training_curves": true,
+    "wandb_project": "ultrasound-clip-optimized",
+    "experiment_name": "convnext_mask_3_v1_4_balanced"
+  },
+  "version": "2.1_v3_1_multiview_balanced_fixed",
+  "experiment_description": "修复版：回到经过验证的simplified_clip_stable损失+恢复原始超参数+保留数据平衡改进"
+}
